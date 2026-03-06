@@ -61,3 +61,22 @@ Build a simple but real agent system that can:
 ## Immediate Next Step
 
 Wire a deterministic metadata ingestion + recent/old classifier slice behind the CLI.
+
+## Current Classify Scaffold
+
+`classify` currently runs a deterministic parse-quality gate and stubs LLM escalation for low-quality documents.
+
+Example:
+
+```bash
+uv run documenters-cle-langchain classify \
+  --manifest data/examples/manifest.sample.json \
+  --cutoff-days 365
+```
+
+Expected output includes:
+
+- total docs
+- parseable docs
+- needs-review docs
+- document ids that would be handed off to an LLM parse-repair stage

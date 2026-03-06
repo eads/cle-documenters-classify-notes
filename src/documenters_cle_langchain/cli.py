@@ -52,6 +52,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "classify":
         run = app.classify(manifest=args.manifest, cutoff_days=args.cutoff_days)
         print(f"classify manifest={run.manifest} cutoff_days={run.cutoff_days}")
+        print(
+            "summary "
+            f"total={run.total_docs} "
+            f"parseable={run.parseable_docs} "
+            f"needs_review={run.needs_review_docs}"
+        )
+        if run.llm_handoff_docs:
+            print(f"llm_handoff doc_ids={','.join(run.llm_handoff_docs)}")
         print(run.note)
         return 0
 
