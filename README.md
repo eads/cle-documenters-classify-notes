@@ -60,4 +60,4 @@ Build a simple but real agent system that can:
 
 ## Immediate Next Step
 
-Scaffold the Python package, `uv` config, and initial command-line entrypoint.
+Wire a deterministic metadata ingestion + recent/old classifier slice behind the CLI.

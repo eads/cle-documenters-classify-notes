@@ -1,0 +1,17 @@
+[project]
+name = "documenters-cle-langchain"
+version = "0.1.0"
+description = "LangChain scaffold for Google Drive document routing and extraction"
+readme = "README.md"
+authors = [
+    { name = "David Eads", email = "davideads@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+documenters-cle-langchain = "documenters_cle_langchain.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9.11,<0.10.0"]
+build-backend = "uv_build"
