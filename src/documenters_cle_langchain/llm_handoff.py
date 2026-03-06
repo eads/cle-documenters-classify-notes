@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from textwrap import dedent
 
 from .manifest import ManifestDocument
 from .quality import ParseQualityAssessment
 from .schemas import ParseRepairLlmOutput
+
+PARSE_REPAIR_PROMPT = dedent("""
+You are a document normalization assistant.
+Recover readable text.
+Preserve tables as markdown.
+Extract candidate dates.
+""").strip()
 
 
 @dataclass(slots=True, frozen=True)
@@ -24,10 +32,7 @@ def build_parse_quality_handoff(
         doc_id=doc.doc_id,
         handoff_type="parse_repair",
         output_schema=ParseRepairLlmOutput.__name__,
-        prompt_stub=(
-            "You are a document normalization assistant. Recover readable text, "
-            "preserve tables as markdown, and extract candidate dates."
-        ),
+        prompt_stub=PARSE_REPAIR_PROMPT,
         reason_codes=assessment.reasons,
     )
 
