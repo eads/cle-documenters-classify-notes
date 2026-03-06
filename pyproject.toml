@@ -7,7 +7,9 @@ authors = [
     { name = "David Eads", email = "davideads@gmail.com" }
 ]
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "pydantic>=2.12.5",
+]
 
 [project.scripts]
 documenters-cle-langchain = "documenters_cle_langchain.cli:main"

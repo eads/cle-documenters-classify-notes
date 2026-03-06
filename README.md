@@ -49,6 +49,7 @@ Build a simple but real agent system that can:
 - Python 3.11+
 - `uv` for dependencies and virtual environment management
 - `python-dotenv` for local credentials and config loading
+- `pydantic` for boundary validation (manifest rows and LLM structured outputs)
 - LangChain for orchestration
 
 ## Working Principles
