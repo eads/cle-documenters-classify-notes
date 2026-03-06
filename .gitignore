@@ -1,0 +1,34 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+
+# Python environments and build artifacts
+.venv/
+.python-version
+build/
+dist/
+*.egg-info/
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Local run artifacts
+data/outputs/
+data/tmp/
+
+# Existing Node artifacts in this workspace (not part of this project)
+node_modules/
+package-lock.json
+package.json
+
+# OS / editor files
+.DS_Store
+.idea/
+.vscode/
