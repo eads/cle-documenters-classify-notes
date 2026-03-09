@@ -166,9 +166,13 @@ def main(argv: list[str] | None = None) -> int:
         out = args.out or args.input
         out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"dedup input={args.input} removed={n_dupes} kept={len(manifest)} out={out}")
-        if decisions and args.review:
+        if args.review:
+            args.review.parent.mkdir(parents=True, exist_ok=True)
             args.review.write_text(_render_review(decisions), encoding="utf-8")
-            print(f"review written to {args.review}")
+            if decisions:
+                print(f"review written to {args.review}")
+            else:
+                print(f"no duplicates found — empty review written to {args.review}")
         return 0
 
     parser.error(f"Unknown command: {args.command}")
@@ -204,6 +208,9 @@ def _render_review(decisions: list) -> str:
         "Verify the kept version is correct — default is newest by modification time.",
         "",
     ]
+    if not decisions:
+        lines.append("No duplicates found.")
+        return "\n".join(lines)
     for d in decisions:
         lines.append(f"## {d.kept.name}")
         lines.append(f"- **reason**: {d.reason}")

@@ -12,6 +12,8 @@ dependencies = [
     "google-auth>=2.0",
     "google-api-python-client>=2.0",
     "python-dotenv>=1.0",
+    "python-dateutil>=2.9",
+    "langchain-anthropic>=0.3",
 ]
 
 [project.scripts]
