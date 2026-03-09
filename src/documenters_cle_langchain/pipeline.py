@@ -169,7 +169,7 @@ def run_pipeline(
 
     any_match = sum(
         1 for r in results
-        if any(v.get("relevant") for v in r.topics.values())
+        if any(v.get("score", 0) >= 0.5 for v in r.topics.values())
     )
     log.info(
         "=== Done === passed=%d skipped=%d any_topic_match=%d",

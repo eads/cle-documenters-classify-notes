@@ -44,10 +44,8 @@ CATEGORIES: list[tuple[str, str, str]] = [
 # ---------------------------------------------------------------------------
 
 class CategoryResult(BaseModel):
-    relevant: bool
-    confidence: float = Field(ge=0.0, le=1.0)
+    score: float = Field(ge=0.0, le=1.0)  # 0 = not relevant, 1 = definitely relevant
     identified: list[str] = Field(default_factory=list)
-    reasoning: str = ""
 
 
 class TopicsResult(BaseModel):
@@ -68,18 +66,22 @@ _PROMPT = ChatPromptTemplate.from_messages([
     ("system", f"""\
 You classify public meeting summaries into topic categories.
 
-For each category below, decide whether the meeting substantively discusses it.
-Be conservative — a passing mention does not count.
+For each category, return a score from 0.0 to 1.0:
+  0.0 = not discussed at all
+  0.5 = mentioned in passing
+  1.0 = substantively discussed
+
+Also list any specific topics identified (empty list if none).
 
 Categories:
 {_CATEGORY_BLOCK}
 """),
     ("human", """\
-Meeting: {{meeting_name}}
-Agency: {{agency}}
+Meeting: {meeting_name}
+Agency: {agency}
 
 Summary:
-{{summary}}
+{summary}
 """),
 ])
 
