@@ -12,8 +12,11 @@ from .schemas import ManifestDocumentInput
 @dataclass(slots=True, frozen=True)
 class ManifestDocument:
     doc_id: str
+    name: str
     folder_path: str
+    modified_time: str
     text: str
+    text_checksum: str
 
 
 def load_manifest(path: Path) -> list[ManifestDocument]:
@@ -38,8 +41,11 @@ def load_manifest(path: Path) -> list[ManifestDocument]:
         documents.append(
             ManifestDocument(
                 doc_id=row.doc_id or f"row-{index}",
+                name=row.name,
                 folder_path=row.folder_path,
+                modified_time=row.modified_time,
                 text=row.text,
+                text_checksum=row.text_checksum,
             )
         )
 

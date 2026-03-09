@@ -22,6 +22,10 @@ dist/
 # Local run artifacts
 data/outputs/
 data/tmp/
+*.json
+
+# Service account credentials
+credentials/
 
 # Existing Node artifacts in this workspace (not part of this project)
 node_modules/
