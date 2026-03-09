@@ -11,7 +11,7 @@ def _write(tmp_path, data):
 
 
 def test_load_basic(tmp_path):
-    p = _write(tmp_path, [{"doc_id": "abc", "text": "hello", "name": "Test Doc"}])
+    p = _write(tmp_path, [{"doc_id": "abc", "text": "hello", "name": "Test Doc", "web_url": "https://example.com"}])
     docs = load_manifest(p)
     assert len(docs) == 1
     assert docs[0].doc_id == "abc"

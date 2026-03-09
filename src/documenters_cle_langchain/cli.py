@@ -52,6 +52,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to local input list for B documents.",
     )
 
+    dedup = subparsers.add_parser(
+        "dedup",
+        help="Deduplicate an existing manifest JSON in place (or to a new file).",
+    )
+    dedup.add_argument("--input", type=Path, required=True, help="Manifest JSON to deduplicate.")
+    dedup.add_argument("--out", type=Path, default=None, help="Output path (defaults to --input, overwrites in place).")
+    dedup.add_argument("--review", type=Path, default=None, help="Write a markdown review file listing kept/dropped docs with Drive URLs.")
+
     fetch = subparsers.add_parser(
         "fetch",
         help="Fetch all Google Docs from a Drive folder and write a manifest JSON.",
@@ -131,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"fetch folder={args.folder} year={args.year} month={args.month}")
         docs, failures = client.fetch_folder(args.folder, year=args.year, month=args.month)
 
-        manifest = [
+        raw_docs = [
             {
                 "doc_id": doc.gdoc_id,
                 "gdoc_id": doc.gdoc_id,
@@ -144,12 +152,63 @@ def main(argv: list[str] | None = None) -> int:
             }
             for doc in docs
         ]
+        manifest, n_dupes, _ = _dedup_manifest(raw_docs)
         args.out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
 
-        print(f"fetched={len(docs)} failed={len(failures)} out={args.out}")
+        print(f"fetched={len(docs)} deduped={n_dupes} kept={len(manifest)} failed={len(failures)} out={args.out}")
         for meta, err in failures:
             print(f"  FAILED {meta.name} ({meta.gdoc_id}): {err}", file=sys.stderr)
         return 0 if not failures else 1
 
+    if args.command == "dedup":
+        raw = json.loads(args.input.read_text(encoding="utf-8"))
+        manifest, n_dupes, decisions = _dedup_manifest(raw)
+        out = args.out or args.input
+        out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"dedup input={args.input} removed={n_dupes} kept={len(manifest)} out={out}")
+        if decisions and args.review:
+            args.review.write_text(_render_review(decisions), encoding="utf-8")
+            print(f"review written to {args.review}")
+        return 0
+
     parser.error(f"Unknown command: {args.command}")
     return 2
+
+
+def _dedup_manifest(rows: list[dict]) -> tuple[list[dict], int, list]:
+    """Run deduplication on raw manifest dicts. Returns (deduped_rows, n_removed, decisions)."""
+    from .manifest import load_manifest
+    from .dedup import deduplicate
+    import tempfile, pathlib
+
+    with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+        json.dump(rows, f)
+        tmp = pathlib.Path(f.name)
+
+    try:
+        docs = load_manifest(tmp)
+    finally:
+        tmp.unlink()
+
+    deduped, decisions = deduplicate(docs)
+    deduped_ids = {d.doc_id for d in deduped}
+    result = [r for r in rows if r["doc_id"] in deduped_ids]
+    return result, len(rows) - len(result), decisions
+
+
+def _render_review(decisions: list) -> str:
+    lines = [
+        "# Deduplication Review",
+        "",
+        "Docs grouped as duplicates by the pipeline. "
+        "Verify the kept version is correct — default is newest by modification time.",
+        "",
+    ]
+    for d in decisions:
+        lines.append(f"## {d.kept.name}")
+        lines.append(f"- **reason**: {d.reason}")
+        lines.append(f"- **KEPT** (modified {d.kept.modified_time}): [{d.kept.name}]({d.kept.web_url})")
+        for dropped in d.dropped:
+            lines.append(f"- dropped (modified {dropped.modified_time}): [{dropped.name}]({dropped.web_url})")
+        lines.append("")
+    return "\n".join(lines)

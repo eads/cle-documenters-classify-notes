@@ -7,6 +7,7 @@ def _doc(doc_id, name, folder_path="2026/March/03-04-2026", text="some text",
     return ManifestDocument(
         doc_id=doc_id,
         name=name,
+        web_url=f"https://docs.google.com/document/d/{doc_id}",
         folder_path=folder_path,
         modified_time=modified_time,
         text=text,
@@ -19,8 +20,9 @@ def test_no_duplicates_unchanged():
         _doc("1", "Agency Meeting 03/04/2026"),
         _doc("2", "Other Agency Meeting 03/04/2026", folder_path="2026/March/03-05-2026"),
     ]
-    result = deduplicate(docs)
+    result, decisions = deduplicate(docs)
     assert len(result) == 2
+    assert decisions == []
 
 
 def test_identical_checksum_keeps_most_recent():
@@ -28,9 +30,10 @@ def test_identical_checksum_keeps_most_recent():
         _doc("1", "Meeting A", text="same", modified_time="2026-03-01T10:00:00Z", checksum="abc"),
         _doc("2", "Meeting A copy", text="same", modified_time="2026-03-04T10:00:00Z", checksum="abc"),
     ]
-    result = deduplicate(docs)
+    result, decisions = deduplicate(docs)
     assert len(result) == 1
     assert result[0].doc_id == "2"
+    assert decisions[0].reason == "checksum"
 
 
 def test_name_containment_keeps_most_recent():
@@ -39,9 +42,10 @@ def test_name_containment_keeps_most_recent():
         _doc("2", "Copy of Agency Board Meeting 03/02/2026", modified_time="2026-03-02T15:00:00Z"),
         _doc("3", "Adam Joseph Copy of Agency Board Meeting 03/02/2026", modified_time="2026-03-01T08:00:00Z"),
     ]
-    result = deduplicate(docs)
+    result, decisions = deduplicate(docs)
     assert len(result) == 1
     assert result[0].doc_id == "2"
+    assert decisions[0].reason == "name_containment"
 
 
 def test_name_containment_scoped_to_folder():
@@ -50,7 +54,7 @@ def test_name_containment_scoped_to_folder():
         _doc("2", "Copy of Agency Meeting 03/02/2026", folder_path="2026/March/03-02-2026"),
         _doc("3", "Agency Meeting 03/05/2026", folder_path="2026/March/03-05-2026"),
     ]
-    result = deduplicate(docs)
+    result, decisions = deduplicate(docs)
     assert len(result) == 2
     ids = {d.doc_id for d in result}
     assert "3" in ids
@@ -58,6 +62,7 @@ def test_name_containment_scoped_to_folder():
 
 def test_single_doc_unchanged():
     docs = [_doc("1", "Solo Meeting")]
-    result = deduplicate(docs)
+    result, decisions = deduplicate(docs)
     assert len(result) == 1
     assert result[0].doc_id == "1"
+    assert decisions == []

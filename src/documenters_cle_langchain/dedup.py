@@ -2,56 +2,80 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 
 from .manifest import ManifestDocument
 
 log = logging.getLogger(__name__)
 
 
-def deduplicate(docs: list[ManifestDocument]) -> list[ManifestDocument]:
-    """Return docs with duplicates removed, keeping the most recently modified.
+@dataclass
+class DedupDecision:
+    kept: ManifestDocument
+    dropped: list[ManifestDocument]
+    reason: str  # "checksum" | "name_containment"
+
+
+def deduplicate(
+    docs: list[ManifestDocument],
+) -> tuple[list[ManifestDocument], list[DedupDecision]]:
+    """Return (kept_docs, decisions) with duplicates removed, newest wins.
 
     Two docs are considered duplicates if:
     - Their text_checksum matches (identical content), or
-    - They share the same folder_path and one name is a substring of the other
-      (same meeting, different version prefixes like "Adam Joseph Copy of ...")
-
-    Within each duplicate group, the doc with the latest modified_time wins.
+    - They share the same folder_path and one name is a substring of the other.
     """
-    # First pass: group by checksum — identical content is trivially deduped
+    kept_after_checksum, checksum_decisions = _dedup_by_checksum(docs)
+    kept_final, name_decisions = _dedup_by_name_containment_all(kept_after_checksum)
+    return kept_final, checksum_decisions + name_decisions
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _dedup_by_checksum(
+    docs: list[ManifestDocument],
+) -> tuple[list[ManifestDocument], list[DedupDecision]]:
     by_checksum: dict[str, list[ManifestDocument]] = defaultdict(list)
     for doc in docs:
-        key = doc.text_checksum or doc.doc_id
-        by_checksum[key].append(doc)
+        by_checksum[doc.text_checksum or doc.doc_id].append(doc)
 
-    deduped_by_checksum: list[ManifestDocument] = []
+    kept: list[ManifestDocument] = []
+    decisions: list[DedupDecision] = []
     for group in by_checksum.values():
         winner = max(group, key=lambda d: d.modified_time or "")
-        if len(group) > 1:
-            dropped = [d.name for d in group if d is not winner]
-            log.info("checksum dedup: keeping '%s', dropping %s", winner.name, dropped)
-        deduped_by_checksum.append(winner)
+        dropped = [d for d in group if d is not winner]
+        if dropped:
+            decisions.append(DedupDecision(kept=winner, dropped=dropped, reason="checksum"))
+            log.info("checksum dedup: keeping '%s', dropping %s", winner.name, [d.name for d in dropped])
+        kept.append(winner)
+    return kept, decisions
 
-    # Second pass: within each folder, name-containment dedup
+
+def _dedup_by_name_containment_all(
+    docs: list[ManifestDocument],
+) -> tuple[list[ManifestDocument], list[DedupDecision]]:
     by_folder: dict[str, list[ManifestDocument]] = defaultdict(list)
-    for doc in deduped_by_checksum:
+    for doc in docs:
         by_folder[doc.folder_path].append(doc)
 
-    result: list[ManifestDocument] = []
+    kept: list[ManifestDocument] = []
+    decisions: list[DedupDecision] = []
     for folder, folder_docs in by_folder.items():
-        result.extend(_dedup_by_name_containment(folder_docs, folder))
+        folder_kept, folder_decisions = _dedup_folder_by_name(folder_docs, folder)
+        kept.extend(folder_kept)
+        decisions.extend(folder_decisions)
+    return kept, decisions
 
-    return result
 
-
-def _dedup_by_name_containment(
+def _dedup_folder_by_name(
     docs: list[ManifestDocument], folder: str
-) -> list[ManifestDocument]:
-    """Within a folder, merge docs where one name is a substring of another."""
+) -> tuple[list[ManifestDocument], list[DedupDecision]]:
     if len(docs) <= 1:
-        return docs
+        return docs, []
 
-    # Build groups: if name_a is in name_b or vice versa, they're the same meeting
     groups: list[set[int]] = []
     for i, a in enumerate(docs):
         matched = False
@@ -67,16 +91,17 @@ def _dedup_by_name_containment(
         if not matched:
             groups.append({i})
 
-    result: list[ManifestDocument] = []
+    kept: list[ManifestDocument] = []
+    decisions: list[DedupDecision] = []
     for group in groups:
         group_docs = [docs[i] for i in group]
         winner = max(group_docs, key=lambda d: d.modified_time or "")
-        if len(group_docs) > 1:
-            dropped = [d.name for d in group_docs if d is not winner]
+        dropped = [d for d in group_docs if d is not winner]
+        if dropped:
+            decisions.append(DedupDecision(kept=winner, dropped=dropped, reason="name_containment"))
             log.info(
                 "name dedup [%s]: keeping '%s', dropping %s",
-                folder, winner.name, dropped,
+                folder, winner.name, [d.name for d in dropped],
             )
-        result.append(winner)
-
-    return result
+        kept.append(winner)
+    return kept, decisions

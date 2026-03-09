@@ -13,6 +13,7 @@ from .schemas import ManifestDocumentInput
 class ManifestDocument:
     doc_id: str
     name: str
+    web_url: str
     folder_path: str
     modified_time: str
     text: str
@@ -42,6 +43,7 @@ def load_manifest(path: Path) -> list[ManifestDocument]:
             ManifestDocument(
                 doc_id=row.doc_id or f"row-{index}",
                 name=row.name,
+                web_url=row.web_url,
                 folder_path=row.folder_path,
                 modified_time=row.modified_time,
                 text=row.text,

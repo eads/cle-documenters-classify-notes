@@ -59,6 +59,42 @@ Build a simple but real agent system that can:
 - Prefer deterministic baselines before adding heavy LLM behavior.
 - Never commit credentials or client-sensitive files.
 
+## Open Questions for Client
+
+These need answers before the pipeline can be fully automated. A deduplication review file (with Drive links) can be generated to help answer some of them.
+
+### Deduplication
+
+- **Which version of a meeting doc should be kept when duplicates exist?**
+  Currently: newest by Google Drive modification time. Is that always right, or does an editor sometimes prefer an older version?
+
+- **Are suggestions always authoritative?**
+  Some docs have a stakeholder's suggestions tracked in Google Docs suggestion mode. The pipeline tries to accept all suggestions automatically. Are there cases where the original text should be preferred over a suggestion?
+
+- **Should duplicates ever be merged rather than one discarded?**
+  E.g. one version has better notes, another has a better single signal.
+
+### Document Structure
+
+- **Are all of these sections always expected?** Summary, Follow-Up Questions, Notes, Single Signal.
+  What should happen when a section is missing entirely?
+
+- **Is "Single Signal" always a single paragraph, or can it be a list?**
+
+- **Are there other section names in use** beyond the ones above?
+  (The template appears to vary across documenters and time.)
+
+- **Who should be notified when a doc fails extraction** (missing fields, low confidence)?
+  Is there a review queue, or does it just get flagged in the spreadsheet?
+
+### Output / Destination
+
+- **Which Google Sheet should extraction results go to?**
+  Who owns it? Should the pipeline append rows or overwrite?
+
+- **What columns does the client actually need in the sheet?**
+  Current assumption: meeting name, agency, date, documenter, summary, single signal, Drive URL.
+
 ## Immediate Next Step
 
 Wire a deterministic metadata ingestion + recent/old classifier slice behind the CLI.
