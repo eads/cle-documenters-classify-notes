@@ -110,11 +110,6 @@ class GoogleDocsClient:
         )
         return results
 
-
-def _checksum(text: str) -> str:
-    normalized = " ".join(text.split())
-    return hashlib.sha256(normalized.encode()).hexdigest()
-
     def _collect_docs(
         self,
         folder_id: str,
@@ -258,3 +253,8 @@ def _checksum(text: str) -> str:
                 failures.append((meta, str(exc)))
 
         return successes, failures
+
+
+def _checksum(text: str) -> str:
+    normalized = " ".join(text.split())
+    return hashlib.sha256(normalized.encode()).hexdigest()

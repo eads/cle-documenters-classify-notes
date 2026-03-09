@@ -50,7 +50,7 @@ def _paragraph(para: dict) -> str:
     if not text.strip():
         return ""
 
-    if bullet:
+    if bullet is not None:
         return "- " + text
     return _HEADING_PREFIX.get(style, "") + text
 
