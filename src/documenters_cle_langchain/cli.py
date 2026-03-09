@@ -52,6 +52,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to local input list for B documents.",
     )
 
+    pipeline = subparsers.add_parser(
+        "pipeline",
+        help="Run the full pipeline: dedup → extract → gate → classify.",
+    )
+    pipeline.add_argument(
+        "--manifest", type=Path, required=True,
+        help="Manifest JSON produced by the fetch command.",
+    )
+    pipeline.add_argument(
+        "--out", type=Path, required=True,
+        help="Output JSON path for pipeline results.",
+    )
+    pipeline.add_argument(
+        "--model", default="gpt-4o-mini",
+        help="OpenAI model for the civic infrastructure classifier.",
+    )
+
     dedup = subparsers.add_parser(
         "dedup",
         help="Deduplicate an existing manifest JSON in place (or to a new file).",
@@ -159,6 +176,38 @@ def main(argv: list[str] | None = None) -> int:
         for meta, err in failures:
             print(f"  FAILED {meta.name} ({meta.gdoc_id}): {err}", file=sys.stderr)
         return 0 if not failures else 1
+
+    if args.command == "pipeline":
+        from .pipeline import run_pipeline
+        from .classifiers import MeetingClassifier
+        import dataclasses
+
+        classifier = MeetingClassifier(model=args.model)
+        result = run_pipeline(manifest_path=args.manifest, classifier=classifier)
+
+        c = result.counts
+        print(
+            f"pipeline done — "
+            f"dedup_removed={c.dedup_decisions} "
+            f"total={c.total_after_dedup} "
+            f"passed={c.passed_gate} "
+            f"skipped={c.skipped} "
+            f"any_topic_match={c.any_topic_match}"
+        )
+        if result.skipped:
+            print("skipped docs:")
+            for s in result.skipped:
+                print(f"  {s.name} missing={s.missing_fields}")
+
+        output = {
+            "counts": dataclasses.asdict(result.counts),
+            "results": [dataclasses.asdict(r) for r in result.results],
+            "skipped": [dataclasses.asdict(s) for s in result.skipped],
+        }
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"results written to {args.out}")
+        return 0
 
     if args.command == "dedup":
         raw = json.loads(args.input.read_text(encoding="utf-8"))

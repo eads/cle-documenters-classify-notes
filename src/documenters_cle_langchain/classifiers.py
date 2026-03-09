@@ -1,51 +1,100 @@
 from __future__ import annotations
 
+import warnings
+
+# LangChain serializes raw OpenAI response objects through Pydantic internals,
+# triggering a spurious warning about the `parsed` field. The data is correct.
+warnings.filterwarnings(
+    "ignore",
+    message="Pydantic serializer warnings",
+    category=UserWarning,
+    module="pydantic",
+)
+
 from pydantic import BaseModel, Field
-from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
-CIVIC_INFRASTRUCTURE_TOPICS = [
-    "stadiums / sports venues",
-    "bridges / roads / highways",
-    "water treatment / processing",
-    "sewers / stormwater",
-    "public transit",
-    "schools / public buildings",
-    "parks / urban forestry",
-    "housing / zoning",
-    "utilities (electric, gas)",
-    "broadband / digital infrastructure",
+
+# ---------------------------------------------------------------------------
+# Category configuration
+# Each entry: (slug, label, description)
+# Add new categories here — no other code changes needed.
+# ---------------------------------------------------------------------------
+
+CATEGORIES: list[tuple[str, str, str]] = [
+    (
+        "infrastructure",
+        "Civic Infrastructure",
+        "stadiums, sports venues, bridges, roads, water treatment, sewers, "
+        "public transit, utilities (electric, gas), broadband, parks, urban forestry",
+    ),
+    (
+        "schools",
+        "Schools & Education",
+        "public schools, school board decisions, closures, budgets, curricula, "
+        "school construction or renovation, CMSD, charter schools",
+    ),
 ]
 
+
+# ---------------------------------------------------------------------------
+# Pydantic output schema
+# One CategoryResult field per category defined above.
+# ---------------------------------------------------------------------------
+
+class CategoryResult(BaseModel):
+    relevant: bool
+    confidence: float = Field(ge=0.0, le=1.0)
+    identified: list[str] = Field(default_factory=list)
+    reasoning: str = ""
+
+
+class TopicsResult(BaseModel):
+    infrastructure: CategoryResult
+    schools: CategoryResult
+
+
+# ---------------------------------------------------------------------------
+# Prompt
+# ---------------------------------------------------------------------------
+
+_CATEGORY_BLOCK = "\n".join(
+    f"- {label} ({slug}): {desc}"
+    for slug, label, desc in CATEGORIES
+)
+
 _PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """\
-You classify public meeting summaries to identify discussions of civic infrastructure.
+    ("system", f"""\
+You classify public meeting summaries into topic categories.
 
-Civic infrastructure includes: {topics}
+For each category below, decide whether the meeting substantively discusses it.
+Be conservative — a passing mention does not count.
 
-Be conservative — only mark as civic infrastructure if the meeting substantively \
-discusses these topics, not just mentions them in passing.\
+Categories:
+{_CATEGORY_BLOCK}
 """),
     ("human", """\
-Meeting: {meeting_name}
-Agency: {agency}
+Meeting: {{meeting_name}}
+Agency: {{agency}}
 
 Summary:
-{summary}
+{{summary}}
 """),
 ])
 
 
-class CivicInfrastructureResult(BaseModel):
-    is_civic_infrastructure: bool
-    topics_identified: list[str] = Field(default_factory=list)
-    confidence: float = Field(ge=0.0, le=1.0)
-    reasoning: str = ""
+# ---------------------------------------------------------------------------
+# Classifier
+# ---------------------------------------------------------------------------
 
+class MeetingClassifier:
+    """Classifies a meeting summary across all configured topic categories."""
 
-class CivicInfrastructureClassifier:
-    def __init__(self, model: str = "claude-haiku-4-5-20251001") -> None:
-        llm = ChatAnthropic(model=model).with_structured_output(CivicInfrastructureResult)
+    def __init__(self, model: str = "gpt-4o-mini") -> None:
+        llm = ChatOpenAI(model=model).with_structured_output(
+            TopicsResult, method="json_schema", strict=True
+        )
         self._chain = _PROMPT | llm
 
     def classify(
@@ -53,9 +102,8 @@ class CivicInfrastructureClassifier:
         meeting_name: str,
         agency: str,
         summary: str,
-    ) -> CivicInfrastructureResult:
+    ) -> TopicsResult:
         return self._chain.invoke({
-            "topics": ", ".join(CIVIC_INFRASTRUCTURE_TOPICS),
             "meeting_name": meeting_name,
             "agency": agency,
             "summary": summary,
