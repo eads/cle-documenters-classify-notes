@@ -19,12 +19,12 @@ CIVIC_INFRASTRUCTURE_TOPICS = [
 
 _PROMPT = ChatPromptTemplate.from_messages([
     ("system", """\
-You classify public meeting notes to identify discussions of civic infrastructure.
+You classify public meeting summaries to identify discussions of civic infrastructure.
 
 Civic infrastructure includes: {topics}
 
-Respond with JSON only. Be conservative — only mark as civic infrastructure if \
-the meeting substantively discusses these topics, not just mentions them in passing.\
+Be conservative — only mark as civic infrastructure if the meeting substantively \
+discusses these topics, not just mentions them in passing.\
 """),
     ("human", """\
 Meeting: {meeting_name}
@@ -32,9 +32,6 @@ Agency: {agency}
 
 Summary:
 {summary}
-
-Notes (excerpt):
-{notes_excerpt}
 """),
 ])
 
@@ -56,13 +53,10 @@ class CivicInfrastructureClassifier:
         meeting_name: str,
         agency: str,
         summary: str,
-        notes: str,
-        notes_max_chars: int = 1500,
     ) -> CivicInfrastructureResult:
         return self._chain.invoke({
             "topics": ", ".join(CIVIC_INFRASTRUCTURE_TOPICS),
             "meeting_name": meeting_name,
             "agency": agency,
             "summary": summary,
-            "notes_excerpt": notes[:notes_max_chars],
         })

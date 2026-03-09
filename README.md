@@ -85,7 +85,7 @@ These need answers before the pipeline can be fully automated. A deduplication r
   (The template appears to vary across documenters and time.)
 
 - **Who should be notified when a doc fails extraction** (missing fields, low confidence)?
-  Is there a review queue, or does it just get flagged in the spreadsheet?
+  Current decision: log and skip. Failed docs are not written to the sheet.
 
 ### Output / Destination
 
