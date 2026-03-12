@@ -62,26 +62,56 @@ _CATEGORY_BLOCK = "\n".join(
     for slug, label, desc in CATEGORIES
 )
 
-_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", f"""\
+AMBIGUOUS_LO = 0.3
+AMBIGUOUS_HI = 0.7
+
+_SYSTEM_PROMPT = f"""\
 You classify public meeting summaries into topic categories.
 
-For each category, return a score from 0.0 to 1.0:
-  0.0 = not discussed at all
-  0.5 = mentioned in passing
-  1.0 = substantively discussed
+For each category, score relevance from 0.0 (not mentioned) to 1.0 (primary focus).
+Score in increments of 0.1. Do not limit yourself to 0, 0.5, or 1 —
+most meetings will have nuanced scores like 0.2, 0.4, 0.7, 0.9.
 
 Also list any specific topics identified (empty list if none).
 
 Categories:
 {_CATEGORY_BLOCK}
-"""),
+"""
+
+_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", _SYSTEM_PROMPT),
     ("human", """\
 Meeting: {meeting_name}
 Agency: {agency}
 
 Summary:
 {summary}
+
+Follow-up Questions:
+{follow_up_questions}
+
+Single Signal:
+{single_signal}
+"""),
+])
+
+_PROMPT_FULL = ChatPromptTemplate.from_messages([
+    ("system", _SYSTEM_PROMPT),
+    ("human", """\
+Meeting: {meeting_name}
+Agency: {agency}
+
+Summary:
+{summary}
+
+Follow-up Questions:
+{follow_up_questions}
+
+Single Signal:
+{single_signal}
+
+Full Notes:
+{notes}
 """),
 ])
 
@@ -91,22 +121,63 @@ Summary:
 # ---------------------------------------------------------------------------
 
 class MeetingClassifier:
-    """Classifies a meeting summary across all configured topic categories."""
+    """Classifies a meeting summary across all configured topic categories.
 
-    def __init__(self, model: str = "gpt-4o-mini") -> None:
+    Initial pass uses summary + follow_up_questions + single_signal.
+    If any category score is ambiguous ([AMBIGUOUS_LO, AMBIGUOUS_HI]),
+    a fallback pass feeds the full notes to a stronger model.
+    """
+
+    def __init__(self, model: str = "gpt-5-mini", fallback_model: str = "gpt-5.4") -> None:
+        self.model = model
+        self.fallback_model = fallback_model
         llm = ChatOpenAI(model=model).with_structured_output(
             TopicsResult, method="json_schema", strict=True
         )
         self._chain = _PROMPT | llm
+        fallback_llm = ChatOpenAI(model=fallback_model).with_structured_output(
+            TopicsResult, method="json_schema", strict=True
+        )
+        self._fallback_chain = _PROMPT_FULL | fallback_llm
 
     def classify(
         self,
         meeting_name: str,
         agency: str,
         summary: str,
+        follow_up_questions: str = "",
+        single_signal: str = "",
     ) -> TopicsResult:
         return self._chain.invoke({
             "meeting_name": meeting_name,
             "agency": agency,
             "summary": summary,
+            "follow_up_questions": follow_up_questions,
+            "single_signal": single_signal,
         })
+
+    def classify_full(
+        self,
+        meeting_name: str,
+        agency: str,
+        summary: str,
+        follow_up_questions: str = "",
+        single_signal: str = "",
+        notes: str = "",
+    ) -> TopicsResult:
+        return self._fallback_chain.invoke({
+            "meeting_name": meeting_name,
+            "agency": agency,
+            "summary": summary,
+            "follow_up_questions": follow_up_questions,
+            "single_signal": single_signal,
+            "notes": notes,
+        })
+
+    @staticmethod
+    def is_ambiguous(result: TopicsResult) -> bool:
+        """True if any category score falls in the ambiguous band [LO, HI]."""
+        return any(
+            AMBIGUOUS_LO <= cat["score"] <= AMBIGUOUS_HI
+            for cat in result.model_dump().values()
+        )

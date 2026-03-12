@@ -58,7 +58,9 @@ class PipelineDoc:
     single_signal: str
     extraction_confidence: float
     # --- classification ---
-    topics: dict  # TopicsResult serialized to dict
+    topics: dict            # TopicsResult serialized to dict
+    classification_pass: str = "initial"  # "initial" or "fallback"
+    model_used: str = ""
 
 
 @dataclass
@@ -146,7 +148,23 @@ def run_pipeline(
             meeting_name=extraction.meeting_name,
             agency=extraction.agency,
             summary=extraction.summary,
+            follow_up_questions=extraction.follow_up_questions,
+            single_signal=extraction.single_signal,
         )
+        classification_pass = "initial"
+        model_used = classifier.model
+        if classifier.is_ambiguous(topics):
+            log.info("  ambiguous scores — running fallback with full notes")
+            topics = classifier.classify_full(
+                meeting_name=extraction.meeting_name,
+                agency=extraction.agency,
+                summary=extraction.summary,
+                follow_up_questions=extraction.follow_up_questions,
+                single_signal=extraction.single_signal,
+                notes=extraction.notes,
+            )
+            classification_pass = "fallback"
+            model_used = classifier.fallback_model
         results.append(PipelineDoc(
             doc_id=doc.doc_id,
             name=doc.name,
@@ -165,6 +183,8 @@ def run_pipeline(
             single_signal=extraction.single_signal,
             extraction_confidence=extraction.confidence,
             topics=topics.model_dump(),
+            classification_pass=classification_pass,
+            model_used=model_used,
         ))
 
     any_match = sum(

@@ -34,8 +34,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output JSON path for pipeline results.",
     )
     pipeline.add_argument(
-        "--model", default="gpt-4o-mini",
+        "--model", default="gpt-5-mini",
         help="OpenAI model for the civic infrastructure classifier.",
+    )
+    pipeline.add_argument(
+        "--fallback-model", default="gpt-5.4",
+        help="Stronger model used for ambiguous docs (score in [0.3, 0.7]).",
+    )
+    pipeline.add_argument(
+        "--csv-out", type=Path, default=None,
+        help="Optional CSV output: web_url, name, date, agency, <topic>_score per row.",
     )
 
     dedup = subparsers.add_parser(
@@ -130,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
         from .classifiers import MeetingClassifier
         import dataclasses
 
-        classifier = MeetingClassifier(model=args.model)
+        classifier = MeetingClassifier(model=args.model, fallback_model=args.fallback_model)
         result = run_pipeline(manifest_path=args.manifest, classifier=classifier)
 
         c = result.counts
@@ -155,6 +163,9 @@ def main(argv: list[str] | None = None) -> int:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"results written to {args.out}")
+        if args.csv_out:
+            _write_csv(result.results, args.csv_out)
+            print(f"CSV written to {args.csv_out}")
         return 0
 
     if args.command == "dedup":
@@ -195,6 +206,37 @@ def _dedup_manifest(rows: list[dict]) -> tuple[list[dict], int, list]:
     deduped_ids = {d.doc_id for d in deduped}
     result = [r for r in rows if r["doc_id"] in deduped_ids]
     return result, len(rows) - len(result), decisions
+
+
+def _score_label(score: float) -> str:
+    from .classifiers import AMBIGUOUS_LO, AMBIGUOUS_HI
+    if score > AMBIGUOUS_HI:
+        return "certain"
+    if score < AMBIGUOUS_LO:
+        return "unlikely"
+    return "ambiguous"
+
+
+def _write_csv(results: list, path: Path) -> None:
+    import csv
+    if not results:
+        return
+    slugs = list(results[0].topics.keys())
+    category_cols = []
+    for s in slugs:
+        category_cols += [f"{s}_score", f"{s}_label", f"{s}_identified"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["web_url", "name", "date", "agency", "model_used"] + category_cols)
+        for r in results:
+            row = [r.web_url, r.name, r.date or r.date_raw, r.agency, r.model_used]
+            for s in slugs:
+                cat = r.topics[s]
+                row.append(cat["score"])
+                row.append(_score_label(cat["score"]))
+                row.append("; ".join(cat.get("identified", [])))
+            writer.writerow(row)
 
 
 def _render_review(decisions: list) -> str:

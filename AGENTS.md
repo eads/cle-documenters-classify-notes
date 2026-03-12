@@ -1,52 +1,52 @@
 # AGENTS
 
-This file defines how humans and coding agents should work in this repository.
+Working conventions for humans and coding agents in this repository.
 
-## Mission
+## What This Is
 
-Deliver a practical LangChain agent system that:
+A local-first pipeline that classifies Cleveland public meeting notes from Google Drive into civic topic categories. No web server, no database — fetch, process, write files.
 
-1. classifies Google Drive documents into A/B,
-2. routes B documents into a sub-agent extraction workflow,
-3. outputs clean structured data for business use.
+## Architecture
+
+```
+src/documenters_cle_langchain/
+  cli.py          — argparse entrypoint (fetch / dedup / pipeline commands)
+  pipeline.py     — orchestrates stages, defines PipelineDoc / PipelineResult
+  classifiers.py  — two-pass LLM classifier (MeetingClassifier)
+  extraction.py   — deterministic section parser (no LLM)
+  gate.py         — required-field filter
+  dedup.py        — checksum + name-containment deduplication
+  manifest.py     — manifest JSON loading and ManifestDocument schema
+  gdrive.py       — Google Drive / Docs API client
+  schemas.py      — shared Pydantic boundary types
+```
+
+## Key Design Decisions
+
+- **Deterministic extraction first.** The parser in `extraction.py` uses regex, no LLM. LLM only enters at the classification stage.
+- **Two-pass classification.** Initial pass uses summary + follow-up questions + single signal with a fast/cheap model. If any category score lands in the ambiguous band (0.3–0.7), a second pass with full notes uses the stronger model.
+- **Gate before LLM.** Docs missing required fields (agency, date, summary, notes) are logged and skipped before any LLM call.
+- **Category config is a single list.** Add topics in `CATEGORIES` in `classifiers.py` — the prompt, schema, and CSV columns all derive from it.
+
+## Running Locally
+
+```bash
+uv run documenters-cle-langchain pipeline \
+  --manifest 2026.json \
+  --out results_2026.json \
+  --csv-out results_2026.csv
+```
+
+Requires `OPENAI_API_KEY` and Google credentials in `.env`.
 
 ## Repo Standards
 
-- Language: Python only.
-- Dependency management: `uv`.
-- Environment variables: `.env` (loaded via `python-dotenv`).
-- Runtime target: local development first.
-- Logging: structured and concise; include document id/path references when possible.
-
-## Implementation Priorities
-
-1. Correctness and reproducibility.
-2. Small, reviewable commits.
-3. Clear interfaces between classify and extract steps.
-4. Fast local feedback loops (CLI + tests).
+- Python only. Dependency management via `uv`.
+- No secrets, tokens, or client documents in commits.
+- Keep `.env` local; provide `.env.example` for new vars.
+- Outputs (JSON, CSV, manifests) are gitignored — keep them local.
 
 ## Commit Style
 
-- Keep commit messages terse and clear.
-- Use prefix hints when helpful: `docs:`, `chore:`, `feat:`, `fix:`.
+- Terse and clear. Prefixes: `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`.
 - One logical change per commit.
-
-## Safety Rules
-
-- Do not commit secrets, tokens, or client docs.
-- Keep `.env` local and provide `.env.example` as needed.
-- Prefer redacted sample documents for tests and demos.
-
-## Expected Workflow
-
-1. Add or update a minimal plan in `README.md` when scope changes.
-2. Implement the smallest vertical slice that runs end-to-end.
-3. Add tests for routing and extraction behavior.
-4. Keep outputs under a predictable local directory (`data/outputs/` once scaffolded).
-
-## First Vertical Slice Target
-
-- Ingest document metadata from Drive.
-- Classify recent vs old.
-- For old docs, extract one or two required fields.
-- Save results to local JSON.

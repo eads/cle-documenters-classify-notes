@@ -24,6 +24,7 @@ data/outputs/
 data/tmp/
 output/
 *.json
+*.csv
 
 # Service account credentials
 credentials/
@@ -32,6 +33,9 @@ credentials/
 node_modules/
 package-lock.json
 package.json
+
+# Claude Code memory
+memory/
 
 # OS / editor files
 .DS_Store
