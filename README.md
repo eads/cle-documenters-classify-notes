@@ -30,7 +30,7 @@ OPENAI_API_KEY=...
 GOOGLE_API_KEY=...              # public/shared folders
 GOOGLE_APPLICATION_CREDENTIALS=...  # path to service account JSON (org-restricted folders)
 ROOT_DRIVE_FOLDER=...           # default folder ID for fetch
-CLASSIFIER_OUTPUT_FOLDER=...    # Drive folder ID for classifier output sheets
+CLASSIFIER_OUTPUT_SHEET=...     # existing Google Sheet ID to write classifier output tabs to
 ```
 
 ## Pipeline
@@ -81,10 +81,10 @@ uv run documenters-cle-langchain dedup \
   --input data/docs_2026.json \
   --review data/dedup_review.md
 
-# Upload an existing results JSON to a new Google Sheet (no pipeline re-run)
+# Upload an existing results JSON to a new tab in the output sheet (no pipeline re-run)
 uv run documenters-cle-langchain upload \
   --results data/results_2026.json \
-  --sheets-folder DRIVE_FOLDER_ID \
+  --sheet-id SHEET_ID \
   --year 2026 --month March
 ```
 

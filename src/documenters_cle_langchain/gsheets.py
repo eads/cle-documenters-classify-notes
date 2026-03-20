@@ -1,4 +1,4 @@
-"""gsheets.py — create a native Google Sheet in Drive and write results to it."""
+"""gsheets.py — write classifier results as a new tab in an existing Google Sheet."""
 from __future__ import annotations
 
 import logging
@@ -11,33 +11,29 @@ from googleapiclient.discovery import build
 log = logging.getLogger(__name__)
 
 _SCOPES = [
-    "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 
 
-def _clients(credentials_file: str | Path, impersonate: str | None = None):
+def _sheets_client(credentials_file: str | Path, impersonate: str | None = None):
     creds = service_account.Credentials.from_service_account_file(
         str(credentials_file), scopes=_SCOPES
     )
     if impersonate:
         creds = creds.with_subject(impersonate)
-    drive = build("drive", "v3", credentials=creds)
-    sheets = build("sheets", "v4", credentials=creds)
-    return drive, sheets
+    return build("sheets", "v4", credentials=creds)
 
 
 def upload_results(
     results: list[dict],
-    folder_id: str,
-    title: str,
+    sheet_id: str,
+    tab_title: str,
     credentials_file: str | Path | None = None,
     impersonate: str | None = None,
 ) -> str:
-    """Create a native Google Sheet in *folder_id*, write results to it, and return its URL.
+    """Add a new tab to an existing Google Sheet and write results to it.
 
-    Creates an empty Sheet via the Drive API (no file upload, no quota consumed),
-    then writes rows via the Sheets API.
+    Returns the URL to the sheet.
     """
     if credentials_file is None:
         credentials_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
@@ -47,37 +43,27 @@ def upload_results(
         )
 
     impersonate = impersonate or os.environ.get("GOOGLE_IMPERSONATE_USER")
-    drive, sheets = _clients(credentials_file, impersonate=impersonate)
+    sheets = _sheets_client(credentials_file, impersonate=impersonate)
 
-    # Create an empty native Sheet directly in the target folder — no upload, no quota used.
-    resp = (
-        drive.files()
-        .create(
-            body={
-                "name": title,
-                "mimeType": "application/vnd.google-apps.spreadsheet",
-                "parents": [folder_id],
-            },
-            fields="id, webViewLink",
-            supportsAllDrives=True,
-        )
-        .execute()
-    )
-    spreadsheet_id = resp["id"]
-    url = resp["webViewLink"]
-    log.info("created sheet '%s': %s", title, url)
+    # Add a new tab with the run title.
+    sheets.spreadsheets().batchUpdate(
+        spreadsheetId=sheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": tab_title}}}]},
+    ).execute()
+    log.info("added tab '%s'", tab_title)
 
-    # Write data via Sheets API.
+    # Write data.
     rows = _build_rows(results)
     if rows:
         sheets.spreadsheets().values().update(
-            spreadsheetId=spreadsheet_id,
-            range="Sheet1",
+            spreadsheetId=sheet_id,
+            range=f"'{tab_title}'!A1",
             valueInputOption="RAW",
             body={"values": rows},
         ).execute()
-        log.info("wrote %d data rows", len(rows) - 1)
+        log.info("wrote %d data rows to tab '%s'", len(rows) - 1, tab_title)
 
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}"
     return url
 
 
@@ -90,3 +76,27 @@ def _score_label(score: float) -> str:
     return "ambiguous"
 
 
+def _build_rows(results: list[dict]) -> list[list]:
+    if not results:
+        return []
+    slugs = list(results[0]["topics"].keys())
+    category_cols = []
+    for s in slugs:
+        category_cols += [f"{s}_score", f"{s}_label", f"{s}_identified"]
+    header = ["web_url", "name", "date", "agency", "model_used"] + category_cols
+    rows = [header]
+    for r in results:
+        row = [
+            r["web_url"],
+            r["name"],
+            r.get("date") or r.get("date_raw", ""),
+            r["agency"],
+            r.get("model_used", ""),
+        ]
+        for s in slugs:
+            cat = r["topics"][s]
+            row.append(cat["score"])
+            row.append(_score_label(cat["score"]))
+            row.append("; ".join(cat.get("identified", [])))
+        rows.append(row)
+    return rows
