@@ -1,0 +1,72 @@
+name: Run Classifier
+
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "Year to fetch (e.g. 2026)"
+        required: true
+        default: "2026"
+      month:
+        description: "Month to fetch (e.g. March) — leave blank for full year"
+        required: false
+        default: ""
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Write service account credentials
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > /tmp/credentials.json
+
+      - name: Fetch docs
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/credentials.json
+        run: |
+          MONTH_FLAG=""
+          if [ -n "${{ inputs.month }}" ]; then
+            MONTH_FLAG="--month ${{ inputs.month }}"
+          fi
+          uv run documenters-cle-langchain fetch \
+            --folder ${{ secrets.ROOT_DRIVE_FOLDER }} \
+            --out data/manifest.json \
+            --year ${{ inputs.year }} \
+            $MONTH_FLAG
+
+      - name: Run pipeline
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/credentials.json
+        run: |
+          MONTH_FLAG=""
+          if [ -n "${{ inputs.month }}" ]; then
+            MONTH_FLAG="--month ${{ inputs.month }}"
+          fi
+          uv run documenters-cle-langchain pipeline \
+            --manifest data/manifest.json \
+            --out data/results.json \
+            --csv-out data/results.csv \
+            --sheet-id ${{ secrets.CLASSIFIER_OUTPUT_SHEET }} \
+            --year ${{ inputs.year }} \
+            $MONTH_FLAG
+
+      - name: Upload results as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ inputs.year }}${{ inputs.month != '' && format('-{0}', inputs.month) || '' }}
+          path: |
+            data/results.json
+            data/results.csv
