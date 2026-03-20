@@ -2,6 +2,37 @@
 
 Python + LangChain pipeline that fetches Cleveland public meeting notes from Google Drive, extracts structured metadata, and classifies each meeting across civic topic categories.
 
+## Requirements & Setup
+
+**Prerequisites:**
+- Python 3.12
+- [`uv`](https://docs.astral.sh/uv/) (preferred environment manager)
+- OpenAI API key
+- Google service account credentials (for org-restricted Drive folders) or a Google API key (for public/shared folders)
+
+**Tooling:**
+- LangChain + `langchain-openai` for LLM orchestration
+- Pydantic for structured output schemas
+- `python-dotenv` for local config
+
+**Install:**
+
+```bash
+uv sync
+```
+
+**Configure:**
+
+Copy `.env.example` to `.env` and fill in credentials:
+
+```
+OPENAI_API_KEY=...
+GOOGLE_API_KEY=...              # public/shared folders
+GOOGLE_APPLICATION_CREDENTIALS=...  # path to service account JSON (org-restricted folders)
+ROOT_DRIVE_FOLDER=...           # default folder ID for fetch
+CLASSIFIER_OUTPUT_FOLDER=...    # Drive folder ID for classifier output sheets
+```
+
 ## Pipeline
 
 ```
@@ -24,34 +55,31 @@ fetch → dedup → extract → gate → classify → JSON + CSV
 
 ## Usage
 
+Run the full pipeline from fetch through classification:
+
+Note that for the moment, fetch must be run separately from the processing steps.
+
 ```bash
 # Fetch docs from a Drive folder
 uv run documenters-cle-langchain fetch \
   --folder DRIVE_FOLDER_ID \
-  --out 2026.json \
+  --out data/docs_2026.json \
   --year 2026
 
-# Run the full pipeline
+# Run extract, gate, and classify on a manifest
 uv run documenters-cle-langchain pipeline \
-  --manifest 2026.json \
-  --out results_2026.json \
-  --csv-out results_2026.csv
+  --manifest data/docs_2026.json \
+  --out data/results_2026.json \
+  --csv-out data/results_2026.csv
+```
 
+**Subcommands** — run individual steps independently:
+
+```bash
 # Dedup a manifest and write a review file
 uv run documenters-cle-langchain dedup \
-  --input 2026.json \
-  --review dedup_review.md
-```
-
-## Configuration
-
-Credentials and API keys go in `.env` (see `.env.example`):
-
-```
-OPENAI_API_KEY=...
-GOOGLE_API_KEY=...         # public/shared folders
-GOOGLE_CREDENTIALS=...     # path to service account JSON (org-restricted folders)
-ROOT_DRIVE_FOLDER=...      # default folder ID for fetch
+  --input data/docs_2026.json \
+  --review data/dedup_review.md
 ```
 
 ## Topic Categories
@@ -59,28 +87,3 @@ ROOT_DRIVE_FOLDER=...      # default folder ID for fetch
 Categories are configured in `classifiers.py` — add a new `(slug, label, description)` tuple to `CATEGORIES` and it will appear in both the classifier and the CSV output with no other changes.
 
 Current categories: **Civic Infrastructure**, **Schools & Education**.
-
-## Tooling
-
-- Python 3.12, `uv`
-- LangChain + `langchain-openai` for LLM orchestration
-- Pydantic for structured output schemas
-- `python-dotenv` for local config
-
-## Open Questions for Client
-
-### Deduplication
-
-- Which version of a meeting doc should be kept when duplicates exist? Currently: newest by modification time.
-- Are Google Docs suggestions always authoritative, or should original text ever be preferred?
-
-### Document Structure
-
-- Are Summary, Follow-Up Questions, Notes, and Single Signal always expected? What should happen when a section is missing?
-- Are there other section names in use beyond these four?
-- Who should be notified when a doc fails the extraction gate?
-
-### Output / Destination
-
-- Which Google Sheet should results go to? Append or overwrite?
-- What columns does the client need beyond what's currently in the CSV?

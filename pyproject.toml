@@ -22,6 +22,13 @@ documenters-cle-langchain = "documenters_cle_langchain.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "pytest-dotenv>=0.5.2",
+]
+
+[tool.pytest.ini_options]
+env_files = [".env"]
+markers = [
+    "integration: tests that hit live Google APIs (require GOOGLE_APPLICATION_CREDENTIALS)",
 ]
 
 [build-system]

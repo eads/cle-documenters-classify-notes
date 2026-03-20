@@ -45,6 +45,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--csv-out", type=Path, default=None,
         help="Optional CSV output: web_url, name, date, agency, <topic>_score per row.",
     )
+    pipeline.add_argument(
+        "--sheets-folder",
+        default=os.environ.get("CLASSIFIER_OUTPUT_FOLDER"),
+        help="Drive folder ID to create a new output sheet in (defaults to CLASSIFIER_OUTPUT_FOLDER env var).",
+    )
+    pipeline.add_argument(
+        "--year", type=int, default=None,
+        help="Year filter applied during fetch — used in the sheet title.",
+    )
+    pipeline.add_argument(
+        "--month", default=None,
+        help="Month filter applied during fetch — used in the sheet title.",
+    )
 
     dedup = subparsers.add_parser(
         "dedup",
@@ -166,6 +179,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.csv_out:
             _write_csv(result.results, args.csv_out)
             print(f"CSV written to {args.csv_out}")
+        if args.sheets_folder:
+            from .gsheets import upload_results
+            title = _sheet_title(args.year, args.month)
+            url = upload_results(result.results, folder_id=args.sheets_folder, title=title)
+            print(f"sheet created: {url}")
         return 0
 
     if args.command == "dedup":
@@ -185,6 +203,16 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.error(f"Unknown command: {args.command}")
     return 2
+
+
+def _sheet_title(year: int | None, month: str | None) -> str:
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    if year and month:
+        return f"Classifier Output — {ts} ({year}/{month})"
+    if year:
+        return f"Classifier Output — {ts} ({year})"
+    return f"Classifier Output — {ts}"
 
 
 def _dedup_manifest(rows: list[dict]) -> tuple[list[dict], int, list]:
