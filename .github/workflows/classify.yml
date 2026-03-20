@@ -43,7 +43,7 @@ jobs:
           fi
           uv run documenters-cle-langchain fetch \
             --folder ${{ secrets.ROOT_DRIVE_FOLDER }} \
-            --out data/manifest.json \
+            --out /tmp/manifest.json \
             --year ${{ inputs.year }} \
             $MONTH_FLAG
 
@@ -57,18 +57,8 @@ jobs:
             MONTH_FLAG="--month ${{ inputs.month }}"
           fi
           uv run documenters-cle-langchain pipeline \
-            --manifest data/manifest.json \
-            --out data/results.json \
-            --csv-out data/results.csv \
+            --manifest /tmp/manifest.json \
+            --out /tmp/results.json \
             --sheet-id ${{ secrets.CLASSIFIER_OUTPUT_SHEET }} \
             --year ${{ inputs.year }} \
             $MONTH_FLAG
-
-      - name: Upload results as artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: results-${{ inputs.year }}${{ inputs.month != '' && format('-{0}', inputs.month) || '' }}
-          path: |
-            data/results.json
-            data/results.csv
