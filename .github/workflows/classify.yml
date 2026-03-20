@@ -30,8 +30,8 @@ jobs:
 
       - name: Write service account credentials
         env:
-          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
-        run: printf '%s' "$GOOGLE_CREDENTIALS_JSON" > /tmp/credentials.json
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+        run: printf '%s' "$GOOGLE_APPLICATION_CREDENTIALS" > /tmp/credentials.json
 
       - name: Fetch docs
         env:
