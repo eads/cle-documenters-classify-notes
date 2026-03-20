@@ -67,6 +67,20 @@ def build_parser() -> argparse.ArgumentParser:
     dedup.add_argument("--out", type=Path, default=None, help="Output path (defaults to --input, overwrites in place).")
     dedup.add_argument("--review", type=Path, default=None, help="Write a markdown review file listing kept/dropped docs with Drive URLs.")
 
+    upload = subparsers.add_parser(
+        "upload",
+        help="Upload an existing results JSON to a new Google Sheet without re-running the pipeline.",
+    )
+    upload.add_argument("--results", type=Path, required=True, help="Pipeline results JSON.")
+    upload.add_argument(
+        "--sheets-folder",
+        default=os.environ.get("CLASSIFIER_OUTPUT_FOLDER"),
+        required=not os.environ.get("CLASSIFIER_OUTPUT_FOLDER"),
+        help="Drive folder ID to create the sheet in (defaults to CLASSIFIER_OUTPUT_FOLDER env var).",
+    )
+    upload.add_argument("--year", type=int, default=None, help="Year label for the sheet title.")
+    upload.add_argument("--month", default=None, help="Month label for the sheet title.")
+
     fetch = subparsers.add_parser(
         "fetch",
         help="Fetch all Google Docs from a Drive folder and write a manifest JSON.",
@@ -182,8 +196,21 @@ def main(argv: list[str] | None = None) -> int:
         if args.sheets_folder:
             from .gsheets import upload_results
             title = _sheet_title(args.year, args.month)
-            url = upload_results(result.results, folder_id=args.sheets_folder, title=title)
+            url = upload_results(
+                [dataclasses.asdict(r) for r in result.results],
+                folder_id=args.sheets_folder,
+                title=title,
+            )
             print(f"sheet created: {url}")
+        return 0
+
+    if args.command == "upload":
+        from .gsheets import upload_results
+        data = json.loads(args.results.read_text(encoding="utf-8"))
+        results = data["results"]
+        title = _sheet_title(args.year, args.month)
+        url = upload_results(results, folder_id=args.sheets_folder, title=title)
+        print(f"sheet created: {url}")
         return 0
 
     if args.command == "dedup":

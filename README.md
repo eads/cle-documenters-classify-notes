@@ -80,6 +80,12 @@ uv run documenters-cle-langchain pipeline \
 uv run documenters-cle-langchain dedup \
   --input data/docs_2026.json \
   --review data/dedup_review.md
+
+# Upload an existing results JSON to a new Google Sheet (no pipeline re-run)
+uv run documenters-cle-langchain upload \
+  --results data/results_2026.json \
+  --sheets-folder DRIVE_FOLDER_ID \
+  --year 2026 --month March
 ```
 
 ## Topic Categories

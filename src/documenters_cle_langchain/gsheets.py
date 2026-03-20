@@ -96,19 +96,26 @@ def _score_label(score: float) -> str:
     return "ambiguous"
 
 
-def _build_rows(results: list) -> list[list]:
+def _build_rows(results: list[dict]) -> list[list]:
+    """Build spreadsheet rows from a list of result dicts (as stored in the pipeline JSON output)."""
     if not results:
         return []
-    slugs = list(results[0].topics.keys())
+    slugs = list(results[0]["topics"].keys())
     category_cols = []
     for s in slugs:
         category_cols += [f"{s}_score", f"{s}_label", f"{s}_identified"]
     header = ["web_url", "name", "date", "agency", "model_used"] + category_cols
     rows = [header]
     for r in results:
-        row = [r.web_url, r.name, r.date or r.date_raw, r.agency, r.model_used]
+        row = [
+            r["web_url"],
+            r["name"],
+            r.get("date") or r.get("date_raw", ""),
+            r["agency"],
+            r.get("model_used", ""),
+        ]
         for s in slugs:
-            cat = r.topics[s]
+            cat = r["topics"][s]
             row.append(cat["score"])
             row.append(_score_label(cat["score"]))
             row.append("; ".join(cat.get("identified", [])))
