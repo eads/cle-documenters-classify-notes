@@ -29,7 +29,9 @@ jobs:
         run: uv sync
 
       - name: Write service account credentials
-        run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > /tmp/credentials.json
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+        run: printf '%s' "$GOOGLE_CREDENTIALS_JSON" > /tmp/credentials.json
 
       - name: Fetch docs
         env:
