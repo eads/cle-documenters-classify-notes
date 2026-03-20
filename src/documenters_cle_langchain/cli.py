@@ -46,17 +46,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional CSV output: web_url, name, date, agency, <topic>_score per row.",
     )
     pipeline.add_argument(
-        "--sheets-folder",
-        default=os.environ.get("CLASSIFIER_OUTPUT_FOLDER"),
-        help="Drive folder ID to create a new output sheet in (defaults to CLASSIFIER_OUTPUT_FOLDER env var).",
+        "--sheet-id",
+        default=os.environ.get("CLASSIFIER_OUTPUT_SHEET"),
+        help="Existing Google Sheet ID to write results to as a new tab (defaults to CLASSIFIER_OUTPUT_SHEET env var).",
     )
     pipeline.add_argument(
         "--year", type=int, default=None,
-        help="Year filter applied during fetch — used in the sheet title.",
+        help="Year filter applied during fetch — used in the tab title.",
     )
     pipeline.add_argument(
         "--month", default=None,
-        help="Month filter applied during fetch — used in the sheet title.",
+        help="Month filter applied during fetch — used in the tab title.",
+    )
+    pipeline.add_argument(
+        "--impersonate",
+        default=os.environ.get("GOOGLE_IMPERSONATE_USER"),
+        help="Email of user to impersonate when writing the sheet (requires domain-wide delegation).",
     )
 
     dedup = subparsers.add_parser(
@@ -73,13 +78,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     upload.add_argument("--results", type=Path, required=True, help="Pipeline results JSON.")
     upload.add_argument(
-        "--sheets-folder",
-        default=os.environ.get("CLASSIFIER_OUTPUT_FOLDER"),
-        required=not os.environ.get("CLASSIFIER_OUTPUT_FOLDER"),
-        help="Drive folder ID to create the sheet in (defaults to CLASSIFIER_OUTPUT_FOLDER env var).",
+        "--sheet-id",
+        default=os.environ.get("CLASSIFIER_OUTPUT_SHEET"),
+        required=not os.environ.get("CLASSIFIER_OUTPUT_SHEET"),
+        help="Existing Google Sheet ID to write results to as a new tab (defaults to CLASSIFIER_OUTPUT_SHEET env var).",
     )
-    upload.add_argument("--year", type=int, default=None, help="Year label for the sheet title.")
-    upload.add_argument("--month", default=None, help="Month label for the sheet title.")
+    upload.add_argument("--year", type=int, default=None, help="Year label for the tab title.")
+    upload.add_argument("--month", default=None, help="Month label for the tab title.")
+    upload.add_argument(
+        "--impersonate",
+        default=os.environ.get("GOOGLE_IMPERSONATE_USER"),
+        help="Email of user to impersonate when writing the sheet (requires domain-wide delegation).",
+    )
 
     fetch = subparsers.add_parser(
         "fetch",
@@ -193,24 +203,27 @@ def main(argv: list[str] | None = None) -> int:
         if args.csv_out:
             _write_csv(result.results, args.csv_out)
             print(f"CSV written to {args.csv_out}")
-        if args.sheets_folder:
+        if args.sheet_id:
             from .gsheets import upload_results
-            title = _sheet_title(args.year, args.month)
             url = upload_results(
                 [dataclasses.asdict(r) for r in result.results],
-                folder_id=args.sheets_folder,
-                title=title,
+                sheet_id=args.sheet_id,
+                tab_title=_tab_title(args.year, args.month),
+                impersonate=args.impersonate,
             )
-            print(f"sheet created: {url}")
+            print(f"results written to sheet: {url}")
         return 0
 
     if args.command == "upload":
         from .gsheets import upload_results
         data = json.loads(args.results.read_text(encoding="utf-8"))
-        results = data["results"]
-        title = _sheet_title(args.year, args.month)
-        url = upload_results(results, folder_id=args.sheets_folder, title=title)
-        print(f"sheet created: {url}")
+        url = upload_results(
+            data["results"],
+            sheet_id=args.sheet_id,
+            tab_title=_tab_title(args.year, args.month),
+            impersonate=args.impersonate,
+        )
+        print(f"results written to sheet: {url}")
         return 0
 
     if args.command == "dedup":
@@ -232,14 +245,14 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
-def _sheet_title(year: int | None, month: str | None) -> str:
+def _tab_title(year: int | None, month: str | None) -> str:
     from datetime import datetime
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
     if year and month:
-        return f"Classifier Output — {ts} ({year}/{month})"
+        return f"{ts} ({year}/{month})"
     if year:
-        return f"Classifier Output — {ts} ({year})"
-    return f"Classifier Output — {ts}"
+        return f"{ts} ({year})"
+    return ts
 
 
 def _dedup_manifest(rows: list[dict]) -> tuple[list[dict], int, list]:

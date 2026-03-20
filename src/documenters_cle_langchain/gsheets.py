@@ -1,4 +1,4 @@
-"""gsheets.py — create a new Google Sheet in a Drive folder and upload results."""
+"""gsheets.py — write classifier results as a new tab in an existing Google Sheet."""
 from __future__ import annotations
 
 import logging
@@ -12,33 +12,28 @@ log = logging.getLogger(__name__)
 
 _SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.file",
 ]
 
 
-def _clients(credentials_file: str | Path):
+def _sheets_client(credentials_file: str | Path, impersonate: str | None = None):
     creds = service_account.Credentials.from_service_account_file(
         str(credentials_file), scopes=_SCOPES
     )
-    sheets = build("sheets", "v4", credentials=creds)
-    drive = build("drive", "v3", credentials=creds)
-    return sheets, drive
+    if impersonate:
+        creds = creds.with_subject(impersonate)
+    return build("sheets", "v4", credentials=creds)
 
 
 def upload_results(
-    results: list,
-    folder_id: str,
-    title: str,
+    results: list[dict],
+    sheet_id: str,
+    tab_title: str,
     credentials_file: str | Path | None = None,
+    impersonate: str | None = None,
 ) -> str:
-    """Create a new Google Sheet in *folder_id*, write *results* to it, and return the URL.
+    """Add a new tab to an existing Google Sheet and write results to it.
 
-    Args:
-        results: list of PipelineDoc (from pipeline.py)
-        folder_id: Drive folder ID to place the sheet in
-        title: spreadsheet title (shown in Drive)
-        credentials_file: path to service account JSON; falls back to
-            GOOGLE_APPLICATION_CREDENTIALS env var
+    Returns the URL to the sheet.
     """
     if credentials_file is None:
         credentials_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
@@ -47,43 +42,28 @@ def upload_results(
             "Provide credentials_file or set GOOGLE_APPLICATION_CREDENTIALS."
         )
 
-    sheets_client, drive_client = _clients(credentials_file)
+    impersonate = impersonate or os.environ.get("GOOGLE_IMPERSONATE_USER")
+    sheets = _sheets_client(credentials_file, impersonate=impersonate)
 
-    # Create the spreadsheet (lands in service account's root)
-    spreadsheet = (
-        sheets_client.spreadsheets()
-        .create(body={"properties": {"title": title}})
-        .execute()
-    )
-    spreadsheet_id = spreadsheet["spreadsheetId"]
-    url = spreadsheet["spreadsheetUrl"]
-    log.info("created spreadsheet: %s (%s)", title, url)
+    # Add a new tab with the run title.
+    sheets.spreadsheets().batchUpdate(
+        spreadsheetId=sheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": tab_title}}}]},
+    ).execute()
+    log.info("added tab '%s'", tab_title)
 
-    # Write data
+    # Write data.
     rows = _build_rows(results)
     if rows:
-        sheets_client.spreadsheets().values().update(
-            spreadsheetId=spreadsheet_id,
-            range="Sheet1",
+        sheets.spreadsheets().values().update(
+            spreadsheetId=sheet_id,
+            range=f"'{tab_title}'!A1",
             valueInputOption="RAW",
             body={"values": rows},
         ).execute()
-        log.info("wrote %d rows to sheet", len(rows) - 1)
+        log.info("wrote %d data rows to tab '%s'", len(rows) - 1, tab_title)
 
-    # Move into the target Drive folder
-    file_meta = drive_client.files().get(
-        fileId=spreadsheet_id, fields="parents"
-    ).execute()
-    current_parents = ",".join(file_meta.get("parents", []))
-    drive_client.files().update(
-        fileId=spreadsheet_id,
-        addParents=folder_id,
-        removeParents=current_parents,
-        fields="id, parents",
-        supportsAllDrives=True,
-    ).execute()
-    log.info("moved sheet to folder %s", folder_id)
-
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}"
     return url
 
 
@@ -97,7 +77,6 @@ def _score_label(score: float) -> str:
 
 
 def _build_rows(results: list[dict]) -> list[list]:
-    """Build spreadsheet rows from a list of result dicts (as stored in the pipeline JSON output)."""
     if not results:
         return []
     slugs = list(results[0]["topics"].keys())
