@@ -1,4 +1,4 @@
-"""gsheets.py — create a new Google Sheet in a Drive folder and upload results."""
+"""gsheets.py — create a native Google Sheet in Drive and write results to it."""
 from __future__ import annotations
 
 import logging
@@ -11,34 +11,33 @@ from googleapiclient.discovery import build
 log = logging.getLogger(__name__)
 
 _SCOPES = [
+    "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.file",
 ]
 
 
-def _clients(credentials_file: str | Path):
+def _clients(credentials_file: str | Path, impersonate: str | None = None):
     creds = service_account.Credentials.from_service_account_file(
         str(credentials_file), scopes=_SCOPES
     )
-    sheets = build("sheets", "v4", credentials=creds)
+    if impersonate:
+        creds = creds.with_subject(impersonate)
     drive = build("drive", "v3", credentials=creds)
-    return sheets, drive
+    sheets = build("sheets", "v4", credentials=creds)
+    return drive, sheets
 
 
 def upload_results(
-    results: list,
+    results: list[dict],
     folder_id: str,
     title: str,
     credentials_file: str | Path | None = None,
+    impersonate: str | None = None,
 ) -> str:
-    """Create a new Google Sheet in *folder_id*, write *results* to it, and return the URL.
+    """Create a native Google Sheet in *folder_id*, write results to it, and return its URL.
 
-    Args:
-        results: list of PipelineDoc (from pipeline.py)
-        folder_id: Drive folder ID to place the sheet in
-        title: spreadsheet title (shown in Drive)
-        credentials_file: path to service account JSON; falls back to
-            GOOGLE_APPLICATION_CREDENTIALS env var
+    Creates an empty Sheet via the Drive API (no file upload, no quota consumed),
+    then writes rows via the Sheets API.
     """
     if credentials_file is None:
         credentials_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
@@ -47,42 +46,37 @@ def upload_results(
             "Provide credentials_file or set GOOGLE_APPLICATION_CREDENTIALS."
         )
 
-    sheets_client, drive_client = _clients(credentials_file)
+    impersonate = impersonate or os.environ.get("GOOGLE_IMPERSONATE_USER")
+    drive, sheets = _clients(credentials_file, impersonate=impersonate)
 
-    # Create the spreadsheet (lands in service account's root)
-    spreadsheet = (
-        sheets_client.spreadsheets()
-        .create(body={"properties": {"title": title}})
+    # Create an empty native Sheet directly in the target folder — no upload, no quota used.
+    resp = (
+        drive.files()
+        .create(
+            body={
+                "name": title,
+                "mimeType": "application/vnd.google-apps.spreadsheet",
+                "parents": [folder_id],
+            },
+            fields="id, webViewLink",
+            supportsAllDrives=True,
+        )
         .execute()
     )
-    spreadsheet_id = spreadsheet["spreadsheetId"]
-    url = spreadsheet["spreadsheetUrl"]
-    log.info("created spreadsheet: %s (%s)", title, url)
+    spreadsheet_id = resp["id"]
+    url = resp["webViewLink"]
+    log.info("created sheet '%s': %s", title, url)
 
-    # Write data
+    # Write data via Sheets API.
     rows = _build_rows(results)
     if rows:
-        sheets_client.spreadsheets().values().update(
+        sheets.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range="Sheet1",
             valueInputOption="RAW",
             body={"values": rows},
         ).execute()
-        log.info("wrote %d rows to sheet", len(rows) - 1)
-
-    # Move into the target Drive folder
-    file_meta = drive_client.files().get(
-        fileId=spreadsheet_id, fields="parents"
-    ).execute()
-    current_parents = ",".join(file_meta.get("parents", []))
-    drive_client.files().update(
-        fileId=spreadsheet_id,
-        addParents=folder_id,
-        removeParents=current_parents,
-        fields="id, parents",
-        supportsAllDrives=True,
-    ).execute()
-    log.info("moved sheet to folder %s", folder_id)
+        log.info("wrote %d data rows", len(rows) - 1)
 
     return url
 
@@ -96,28 +90,3 @@ def _score_label(score: float) -> str:
     return "ambiguous"
 
 
-def _build_rows(results: list[dict]) -> list[list]:
-    """Build spreadsheet rows from a list of result dicts (as stored in the pipeline JSON output)."""
-    if not results:
-        return []
-    slugs = list(results[0]["topics"].keys())
-    category_cols = []
-    for s in slugs:
-        category_cols += [f"{s}_score", f"{s}_label", f"{s}_identified"]
-    header = ["web_url", "name", "date", "agency", "model_used"] + category_cols
-    rows = [header]
-    for r in results:
-        row = [
-            r["web_url"],
-            r["name"],
-            r.get("date") or r.get("date_raw", ""),
-            r["agency"],
-            r.get("model_used", ""),
-        ]
-        for s in slugs:
-            cat = r["topics"][s]
-            row.append(cat["score"])
-            row.append(_score_label(cat["score"]))
-            row.append("; ".join(cat.get("identified", [])))
-        rows.append(row)
-    return rows

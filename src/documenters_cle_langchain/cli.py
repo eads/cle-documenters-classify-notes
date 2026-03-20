@@ -58,6 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--month", default=None,
         help="Month filter applied during fetch — used in the sheet title.",
     )
+    pipeline.add_argument(
+        "--impersonate",
+        default=os.environ.get("GOOGLE_IMPERSONATE_USER"),
+        help="Email of user to impersonate when creating the sheet (requires domain-wide delegation).",
+    )
 
     dedup = subparsers.add_parser(
         "dedup",
@@ -80,6 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     upload.add_argument("--year", type=int, default=None, help="Year label for the sheet title.")
     upload.add_argument("--month", default=None, help="Month label for the sheet title.")
+    upload.add_argument(
+        "--impersonate",
+        default=os.environ.get("GOOGLE_IMPERSONATE_USER"),
+        help="Email of user to impersonate when creating the sheet (requires domain-wide delegation).",
+    )
 
     fetch = subparsers.add_parser(
         "fetch",
@@ -200,6 +210,7 @@ def main(argv: list[str] | None = None) -> int:
                 [dataclasses.asdict(r) for r in result.results],
                 folder_id=args.sheets_folder,
                 title=title,
+                impersonate=args.impersonate,
             )
             print(f"sheet created: {url}")
         return 0
@@ -209,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
         data = json.loads(args.results.read_text(encoding="utf-8"))
         results = data["results"]
         title = _sheet_title(args.year, args.month)
-        url = upload_results(results, folder_id=args.sheets_folder, title=title)
+        url = upload_results(results, folder_id=args.sheets_folder, title=title, impersonate=args.impersonate)
         print(f"sheet created: {url}")
         return 0
 
