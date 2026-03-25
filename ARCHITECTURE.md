@@ -118,20 +118,19 @@ Due to service account and workspace restrictions, the agent reads and writes th
 
 The retrieved similar themes column is the most important design element. It gives the reporter the context to decide whether a borderline candidate should stand alone or fold into something that already exists. Without it, Rename is a guess.
 
-**Theme library tab** — a human-readable and human-editable view of the full Theme Library: all confirmed sub-topics, their topic assignments, question type distributions, source meeting count, and canonical descriptions. Reporters and editors can make direct corrections here between runs. The next run reads this tab as its source of truth before querying the vector store, so manual edits propagate automatically.
+**Theme overview tab** — a read-only report written by the agent each run. One row per confirmed sub-topic theme, with rollup counts (occurrences, question type distribution) and up to 3 representative source passages. Editors can read this to understand what the Theme Library contains, but do not edit it — it is agent-owned and will be regenerated next run. Bulk theme corrections flow through the classified notes tab (see below).
 
-**Tidy data model — fact table and dimension table.** The two tabs form a simple relational structure:
+**Single editing surface.** The classified notes tab is the only interface where human decisions are made. This is a deliberate constraint: with one or two editors per run, having two editing surfaces (classified notes + theme library) creates confusion about where to work and whose edit takes precedence. All corrections — including theme-level renames — are made by editing Decision and Corrected sub-topic cells in the classified notes tab. The Theme Library is derived entirely from those decisions.
 
-- The **classified notes tab is the fact table**: one row per follow-up question per run, with the source question verbatim, sub-topic assignment, topic, question type, confidence, and meeting metadata. Every individual question that was processed lives here.
-- The **theme library tab is the dimension table**: one row per confirmed sub-topic theme, with rollup counts (occurrences, question type distribution) and up to 3 representative source passages for retrieval display.
+**Tidy data model — fact table and derived summary.** The classified notes tab is the fact table: one row per follow-up question per run, every question that was processed. The theme overview tab is a derived summary: a rollup of confirmed themes across all runs, regenerated from classified notes decisions at the end of each run.
 
-They join on `sub_topic`. To find all source questions for a theme, filter the classified notes by `sub_topic`. To find all themes that appeared in a given meeting, filter by URL or meeting date.
+They join on `sub_topic`. To find all source questions for a theme, filter the classified notes by `sub_topic`. To find all themes that appeared in a given meeting, filter by URL or meeting date. Non-technical editorial staff can build pivot tables directly on the classified notes tabs — occurrences by topic, question type distributions over time, which meetings produced the most new themes.
 
-This structure is intentional and load-bearing. It means non-technical editorial staff can build pivot tables directly in Google Sheets — occurrences by topic, question type distributions over time, which meetings produced the most new themes. The fact table is the analysis surface; the theme library is the lookup. Source passages are **not** stored exhaustively in the theme library — the classified notes tabs are the canonical record. The theme library carries only a small number of representative passages (up to 3) for inline display when the agent shows retrieved similar themes to a reporter. All historical passage retrieval goes through the classified notes tabs.
+Source passages are **not** stored exhaustively in the theme overview tab — the classified notes tabs are the canonical record. The theme overview tab carries only up to 3 representative passages per theme for inline display when the agent shows retrieved similar themes to a reporter.
 
-**Theme library versioning (bootstrapping phase):** Each run writes a new theme library tab, named by run date. The next run seeds from the most recent tab — absorbing any renames, rejects, and human corrections made there — and writes a fresh tab with the updated library. Nothing is ever overwritten; full history is preserved across tabs with no merge labor required.
+**How the Theme Library persists between runs.** The agent writes a theme overview tab at the end of each run as a materialized cache of the derived library state. At the start of the next run, the agent reads that cached tab as a base, then applies new Accept/Rename/Reject decisions from the most recent classified notes tab. This avoids re-reading all historical classified notes tabs on every run while keeping the classified notes tab as the true source of authority.
 
-This is a pragmatic solution appropriate for the bootstrapping phase, not a permanent architecture. Once the library has stabilized and the team is confident in the classifications, the appropriate next step is to designate a canonical tab and move to an append-only model — or, if the system has earned real investment by that point, replace Google Sheets with a proper database. The two-tab-per-run approach is the right call now precisely because it keeps options open and failure cheap.
+Nothing is ever overwritten; full history is preserved across tabs. The theme overview tab is versioned by run date (`theme-overview-YYYY-MM-DD`); the most recent one is always the cache used at startup.
 
 ---
 
@@ -169,12 +168,13 @@ For each candidate, the agent makes two independent classifications:
 **Topic** is assigned by matching the sub-topic to the national taxonomy — a constrained lookup, not open inference.
 
 **human_review**
-Low-confidence sub-topic classifications are flagged in the classified notes tab of the Google Sheet (see RAG Corpus above). The design principle is that a reporter should be able to action a row in under a minute without reading documentation — the agent does the cognitive work up front, the human makes a judgment call. The next run reads the Decision column and routes accordingly: Accept and Rename write to the Theme Library, Reject discards.
+Low-confidence sub-topic classifications are flagged in the classified notes tab of the Google Sheet. The design principle is that an editor should be able to action a row in under a minute without reading documentation — the agent does the cognitive work up front, the human makes a judgment call. The classified notes tab is the **only** editing surface: all corrections, including theme-level renames, flow through the Decision and Corrected sub-topic columns here. The next run reads those decisions and routes accordingly: Accept and Rename update the Theme Library, Reject discards.
 
 **write_back**
 
-- Update Theme Library with new and confirmed themes (sub-topic, topic, question type, source passage, meeting metadata).
-- Tag the source record with extracted theme classifications.
+- Write classified notes tab for this run (one row per processed question, with agent columns and empty decision columns for editors).
+- Derive updated Theme Library from: (a) the prior run's theme overview cache, plus (b) Accept/Rename/Reject decisions in the classified notes tab just written.
+- Write a new versioned theme overview tab as the materialized cache for the next run.
 
 ---
 
