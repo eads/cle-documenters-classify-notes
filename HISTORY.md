@@ -4,6 +4,52 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #16 — Human review feedback: read decisions, update Theme Library
+
+**Date:** 2026-03-25
+
+**Branch:** `issue-16-human-review-feedback`
+
+**What was built:**
+
+`feedback.py` — closes the feedback loop between human review decisions and the Theme Library.
+
+`ReviewDecision` TypedDict: the fields extracted from each classified notes row needed for library derivation — source question, sub-topic, topic, question type, decision, corrected sub-topic, and question type override.
+
+`find_latest_classified_notes_tab(tab_titles)` — same pattern as `find_latest_theme_tab`; ISO date suffixes sort lexicographically.
+
+`read_classified_notes_decisions(sheets, sheet_id)` — reads the most recent classified notes tab. Column-tolerant (header-name lookup). Cold start (no tab exists) returns empty list cleanly.
+
+`apply_decisions(base_library, decisions)` — pure function, the testable core. Takes the base library from the prior theme overview tab and a list of decisions from the most recent classified notes tab. Routes:
+- **Accept**: find or create theme by `sub_topic`; increment occurrence count and question type count; add source question as representative passage.
+- **Rename**: use `corrected_sub_topic` as the canonical label. If that label exists in the library, merge into it. If not, create a new `ThemeRecord`. The original (wrong) label is not added.
+- **Reject**: skip. Neither the theme nor any count is modified.
+- **Blank / unknown**: skip.
+
+`question_type_override` takes precedence over the agent-assigned `question_type` when incrementing counts, per the issue spec.
+
+`graph.py` — two changes: (1) `load_library` is now the entry node. It derives the theme library before `retrieve_context` runs, so the vector store is built from the most current confirmed themes. With `sheet_id=None` (dry runs, tests), it returns an empty library without hitting Sheets. (2) `write_back` now writes both the classified notes tab and the theme overview tab per run. The theme overview tab is the materialized cache the next run reads as its base library.
+
+`theme_library.py` — `ThemeRecord.description` now defaults to `""`. Themes bootstrapped from Accept/Rename decisions in `apply_decisions` don't have a description available (it's not in the classified notes tab). Empty string is the right placeholder; the embedding will be `"{sub_topic}: "` which is less informative but functional. Editors can refine descriptions in the theme overview tab if needed.
+
+30 new tests in `test_feedback.py`. 264 total tests pass.
+
+**Key decisions:**
+
+- **`apply_decisions` is a pure function, not a Sheets call.** The derivation logic is fully testable without credentials. Sheets I/O is isolated to `read_classified_notes_decisions` and the graph's `load_library` node. Same pattern as `build_classified_notes_rows` in `write_back.py`.
+
+- **Rename does not carry the original label forward.** When a reporter renames "bad label" → "correct label", only "correct label" appears in the updated library. The original is not added, not rejected, not tracked. Its occurrence count is attributed to "correct label".
+
+- **Unknown topic strings fall back to DEVELOPMENT with a warning.** Topic values come from the agent's classified notes output and should always be valid taxonomy strings. The fallback handles the theoretical case without crashing. DEVELOPMENT is a reasonable default (covers the widest civic ground) and the warning makes it visible in logs.
+
+- **`load_library → ingest` topology.** `load_library` and `ingest` are independent — they could run in parallel. Sequential is simpler, and load_library is fast (one or two Sheets API calls). Parallelism isn't worth the complexity here.
+
+**Deferred:**
+
+- The open question from the issue ("When Rename merges into an existing theme, which question type wins?") is resolved as: the new source passage contributes a count to the existing distribution; no override. Implemented as specified.
+
+---
+
 ## Issue #15 — write_back node: classified notes tab output
 
 **Date:** 2026-03-25
