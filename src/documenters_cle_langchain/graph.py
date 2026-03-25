@@ -1,14 +1,12 @@
 """graph.py — LangGraph agent for meeting note theme extraction and classification.
 
 Graph topology:
-    [ingest] → [retrieve_context] → [extract_candidates]
-             → [classify_themes] → [human_review] → [write_back]
+    [load_library] → [ingest] → [retrieve_context] → [extract_candidates]
+                  → [classify_themes] → [human_review] → [write_back]
 
-Each node is a named, traced unit. Nodes are stubs in this initial scaffolding
-issue and will be filled in by subsequent issues.
-
-State flows as a single GraphState dict through all nodes. The graph processes
-one full manifest run (batch of documents) per invocation.
+Each node is a named, traced unit. State flows as a single GraphState dict
+through all nodes. The graph processes one full manifest run (batch of
+documents) per invocation.
 
 Configuration (model names, thresholds, retrieval k) is passed at construction
 time via GraphConfig so LLM chains are built once and reused.
@@ -64,9 +62,6 @@ class GraphConfig:
 # TypedDict is the LangGraph convention. All nodes read from and write to this
 # shared state dict. Nodes return only the keys they update; the graph merges
 # the returned dict into the running state.
-#
-# Fields typed as list[Any] will be narrowed to specific Pydantic types in
-# subsequent issues as those types are defined (ThemeRecord, IngestedDoc, etc.).
 # ---------------------------------------------------------------------------
 
 class GraphState(TypedDict):
@@ -75,21 +70,21 @@ class GraphState(TypedDict):
     sheet_id: str | None            # Google Sheet ID for output tabs
     run_date: str                   # ISO date string (YYYY-MM-DD); used for tab naming
 
-    # --- loaded from Sheets at run start (Issue #11 / #16) ---
+    # --- loaded from Sheets at run start by load_library node ---
     theme_library: list[Any]        # list[ThemeRecord] — confirmed themes from prior runs
     prior_decisions: list[Any]      # list[ReviewDecision] from prior run's classified notes tab
 
-    # --- ingest output (Issue #10) ---
+    # --- ingest output ---
     ingested_docs: list[IngestedDoc]    # extracted, gate-passed, questions parsed
     skipped_docs: list[SkippedDoc]      # failed the required-field gate
 
-    # --- retrieve_context output (Issue #12) ---
+    # --- retrieve_context output ---
     retrieval_context: list[QuestionContext]  # per-question similar themes from library
 
-    # --- extract_candidates output (Issue #13) ---
+    # --- extract_candidates output ---
     candidates: list[ThemeCandidate]  # proposed sub-topics per question
 
-    # --- classify_themes output (Issue #14) ---
+    # --- classify_themes output ---
     classified_themes: list[ClassifiedTheme]  # merged/new + question type + topic
     needs_review: list[ClassifiedTheme]       # subset flagged for human review
 
@@ -98,12 +93,43 @@ class GraphState(TypedDict):
 
 
 # ---------------------------------------------------------------------------
-# Stub nodes
-#
-# Each node accepts GraphState and returns a dict of the keys it updates.
-# Returning {} means "no state changes" — safe for stubs.
-# Nodes will be replaced with real implementations in subsequent issues.
+# Nodes
 # ---------------------------------------------------------------------------
+
+def load_library(state: GraphState) -> dict:
+    """Derive the current run's Theme Library from prior Sheets tabs.
+
+    Reads the most recent theme-overview tab (base library) and the most recent
+    classified-notes tab (human decisions). Applies decisions to produce the
+    updated library for this run.
+
+    Cold start (no prior tabs) → empty library, no error.
+    Dry run (sheet_id=None) → empty library, no Sheets calls.
+
+    Inputs:  sheet_id
+    Outputs: theme_library, prior_decisions
+    """
+    sheet_id = state.get("sheet_id")
+    if not sheet_id:
+        log.info("load_library: no sheet_id — cold start with empty library")
+        return {"theme_library": [], "prior_decisions": []}
+
+    from .feedback import apply_decisions, read_classified_notes_decisions
+    from .theme_library import build_sheets_client, read_theme_library
+
+    sheets = build_sheets_client()
+    base_library = read_theme_library(sheets, sheet_id)
+    decisions = read_classified_notes_decisions(sheets, sheet_id)
+    updated_library = apply_decisions(base_library, decisions)
+
+    log.info(
+        "load_library: %d base themes + %d decisions → %d themes",
+        len(base_library),
+        len(decisions),
+        len(updated_library),
+    )
+    return {"theme_library": updated_library, "prior_decisions": decisions}
+
 
 def ingest(state: GraphState) -> dict:
     """Wrap extraction.py; parse follow-up questions into individual items.
@@ -115,17 +141,9 @@ def ingest(state: GraphState) -> dict:
     return {"ingested_docs": ingested, "skipped_docs": skipped}
 
 
-# retrieve_context is built as a closure inside build_graph so it can capture
-# the embedding model name and k from GraphConfig without hardcoding them here.
-# See _make_retrieve_context_node below.
-
-
-# extract_candidates is built as a closure inside build_graph so it can capture
-# the model name from GraphConfig. See build_graph below.
-
-
-# classify_themes is built as a closure inside build_graph so it can capture
-# model names and the review threshold from GraphConfig. See build_graph below.
+# retrieve_context, extract_candidates, and classify_themes are built as
+# closures inside build_graph so they can capture model names and thresholds
+# from GraphConfig without hardcoding them here.
 
 
 def human_review(state: GraphState) -> dict:
@@ -138,31 +156,45 @@ def human_review(state: GraphState) -> dict:
 
 
 def write_back(state: GraphState) -> dict:
-    """Write classified notes tab and updated theme library tab to Google Sheets.
+    """Write classified notes tab and theme overview tab to Google Sheets.
 
-    Inputs:  classified_themes, ingested_docs, sheet_id, run_date
+    Inputs:  classified_themes, ingested_docs, theme_library, sheet_id, run_date
     Outputs: run_summary
 
-    Skips Sheets output when sheet_id is None (useful for dry runs and tests).
-    Theme library tab write is a stub — implemented in a subsequent issue.
+    Skips Sheets output when sheet_id is None (dry runs / tests).
+    Writes two tabs per run:
+      - classified-notes-{run_date}: one row per question, decision columns blank
+      - theme-overview-{run_date}: materialized library cache for the next run
     """
     sheet_id = state.get("sheet_id")
     if not sheet_id:
         log.info("write_back: no sheet_id — skipping Sheets output")
         return {"run_summary": {"sheets_written": 0}}
 
-    from .theme_library import build_sheets_client
+    from .theme_library import build_sheets_client, write_theme_library
     from .write_back import write_classified_notes
 
     sheets = build_sheets_client()
-    tab = write_classified_notes(
+    classified_tab = write_classified_notes(
         state["classified_themes"],
         state["ingested_docs"],
         sheets,
         sheet_id,
         state["run_date"],
     )
-    return {"run_summary": {"classified_notes_tab": tab, "sheets_written": 1}}
+    theme_tab = write_theme_library(
+        state["theme_library"],
+        sheets,
+        sheet_id,
+        state["run_date"],
+    )
+    return {
+        "run_summary": {
+            "classified_notes_tab": classified_tab,
+            "theme_overview_tab": theme_tab,
+            "sheets_written": 2,
+        }
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +296,7 @@ def build_graph(config: GraphConfig | None = None) -> Any:
 
     graph = StateGraph(GraphState)
 
+    graph.add_node("load_library", load_library)
     graph.add_node("ingest", ingest)
     graph.add_node("retrieve_context", _retrieve_context)
     graph.add_node("extract_candidates", _extract_candidates)
@@ -271,7 +304,8 @@ def build_graph(config: GraphConfig | None = None) -> Any:
     graph.add_node("human_review", human_review)
     graph.add_node("write_back", write_back)
 
-    graph.set_entry_point("ingest")
+    graph.set_entry_point("load_library")
+    graph.add_edge("load_library", "ingest")
     graph.add_edge("ingest", "retrieve_context")
     graph.add_edge("retrieve_context", "extract_candidates")
     graph.add_edge("extract_candidates", "classify_themes")
