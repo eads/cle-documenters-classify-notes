@@ -120,6 +120,15 @@ The retrieved similar themes column is the most important design element. It giv
 
 **Theme library tab** — a human-readable and human-editable view of the full Theme Library: all confirmed sub-topics, their topic assignments, question type distributions, source meeting count, and canonical descriptions. Reporters and editors can make direct corrections here between runs. The next run reads this tab as its source of truth before querying the vector store, so manual edits propagate automatically.
 
+**Tidy data model — fact table and dimension table.** The two tabs form a simple relational structure:
+
+- The **classified notes tab is the fact table**: one row per follow-up question per run, with the source question verbatim, sub-topic assignment, topic, question type, confidence, and meeting metadata. Every individual question that was processed lives here.
+- The **theme library tab is the dimension table**: one row per confirmed sub-topic theme, with rollup counts (occurrences, question type distribution) and up to 3 representative source passages for retrieval display.
+
+They join on `sub_topic`. To find all source questions for a theme, filter the classified notes by `sub_topic`. To find all themes that appeared in a given meeting, filter by URL or meeting date.
+
+This structure is intentional and load-bearing. It means non-technical editorial staff can build pivot tables directly in Google Sheets — occurrences by topic, question type distributions over time, which meetings produced the most new themes. The fact table is the analysis surface; the theme library is the lookup. Source passages are **not** stored exhaustively in the theme library — the classified notes tabs are the canonical record. The theme library carries only a small number of representative passages (up to 3) for inline display when the agent shows retrieved similar themes to a reporter. All historical passage retrieval goes through the classified notes tabs.
+
 **Theme library versioning (bootstrapping phase):** Each run writes a new theme library tab, named by run date. The next run seeds from the most recent tab — absorbing any renames, rejects, and human corrections made there — and writes a fresh tab with the updated library. Nothing is ever overwritten; full history is preserved across tabs with no merge labor required.
 
 This is a pragmatic solution appropriate for the bootstrapping phase, not a permanent architecture. Once the library has stabilized and the team is confident in the classifications, the appropriate next step is to designate a canonical tab and move to an append-only model — or, if the system has earned real investment by that point, replace Google Sheets with a proper database. The two-tab-per-run approach is the right call now precisely because it keeps options open and failure cheap.
