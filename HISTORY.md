@@ -164,6 +164,45 @@ Six stub nodes: `ingest`, `retrieve_context`, `extract_candidates`, `classify_th
 
 ---
 
+## Issue #13 — extract_candidates node: LLM theme extraction from questions
+
+**Date:** 2026-03-25
+
+**Branch:** `issue-13-extract-candidates-node`
+
+**What was built:**
+
+`extract_candidates.py` — the extract_candidates node implementation and supporting types. One LLM call per follow-up question using `gpt-5.4` with structured output.
+
+`ThemeCandidate` Pydantic model: `{doc_id, source_question, sub_topic, description, retrieved_context}`. The LLM generates only `sub_topic` and `description` via a separate internal `_ExtractedTheme` schema; `doc_id`, `source_question`, and `retrieved_context` are attached from input data, not by the model.
+
+`build_extraction_prompt(question, similar_themes) → list[dict]` — pure function, no LLM call. Retrieved similar themes are formatted as numbered human-readable lines, not raw JSON. Cold-start (no similar themes) produces a message telling the model this may be a new sub-topic.
+
+`run_extract_candidates(retrieval_context, llm)` — accepts the LLM as a parameter (injectable) so tests pass `FakeLLM` without credentials.
+
+`GraphState.candidates` narrowed from `list[Any]` to `list[ThemeCandidate]`.
+
+The `extract_candidates` node in `graph.py` is now a closure that captures `extract_model` from `GraphConfig`. `ChatOpenAI` is instantiated lazily — only when `retrieval_context` is non-empty — so cold-start graph runs don't require `OPENAI_API_KEY`.
+
+29 new tests in `tests/test_extract_candidates.py`. 161 total tests pass, no warnings.
+
+**Key decisions:**
+
+- **One-to-one per the issue recommendation.** One `QuestionContext` → one `ThemeCandidate`. The hard-case test (`test_hard_case_ambiguous_question_produces_single_candidate`) verifies this contract holds for questions spanning two topics — the model is instructed to pick the most specific and actionable one.
+
+- **`retrieved_context: list[dict]` in ThemeCandidate.** The similar themes provided as context are stored verbatim on the candidate so downstream nodes (`classify_themes`, `write_back`) know what evidence the model had. Typed as `list[dict]` rather than `list[SimilarTheme]` to avoid Pydantic/TypedDict interop friction.
+
+- **Prompt separates system role (what a sub-topic IS) from user role (the specific question + context).** System prompt includes concrete examples of specific vs. generic labels so the model understands the level of specificity required. This structure also makes prompt ablation easy — swap the system prompt to test different framing without touching the user template.
+
+- **Graph integration tests updated.** `test_ingest_node_populates_state` and `test_ingest_node_questions_in_state` in `test_ingest.py` were running the full graph and inadvertently triggering LLM calls once `extract_candidates` became real. Fixed by: (a) giving the graph integration test a `NO_QUESTIONS_DOC` fixture (no follow-up questions → empty retrieval_context → LLM never called), (b) changing `test_ingest_node_questions_in_state` to call `run_ingest` directly since question parsing is ingest logic, not graph topology.
+
+**Deferred:**
+
+- Narrative notes as additional context in the extraction prompt. Architecture spec describes narrative notes as "useful context but not the primary signal." Currently the prompt only sees the follow-up question + retrieved similar themes. Whether narrative notes improve sub-topic quality is an open empirical question for LangSmith evaluation after the first real run.
+- One-to-many (one question → multiple candidates). The one-to-one rule is a starting constraint. If LangSmith shows genuine multi-theme questions are systematically collapsing into one muddled candidate, revisit before bootstrapping is complete.
+
+---
+
 ## Issue #12 — retrieve_context node: in-memory vector store and semantic retrieval
 
 **Date:** 2026-03-25
