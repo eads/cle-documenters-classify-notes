@@ -8,8 +8,10 @@ They join on ``sub_topic``. Source passages are NOT stored exhaustively here;
 the classified notes tabs are the canonical record. ThemeRecord carries up to
 3 representative passages for inline retrieval display only.
 
-Tab naming: ``theme-library-YYYY-MM-DD``. Each run writes a new versioned tab;
-nothing is ever overwritten. The next run seeds from the most recent tab.
+Tab naming: ``theme-overview-YYYY-MM-DD``. Each run writes a new versioned tab;
+nothing is ever overwritten. The next run reads it as a base cache, then applies
+new decisions from the classified notes tab on top. Humans read this tab for
+reference but do not edit it — it is agent-owned and will be regenerated.
 """
 from __future__ import annotations
 
@@ -27,7 +29,7 @@ log = logging.getLogger(__name__)
 # Taxonomy enums
 # ---------------------------------------------------------------------------
 
-THEME_TAB_PREFIX = "theme-library-"
+THEME_TAB_PREFIX = "theme-overview-"
 _SEP = " ||| "
 _MAX_PASSAGES = 3
 
