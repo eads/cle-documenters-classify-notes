@@ -96,7 +96,7 @@ class ThemeRecord(BaseModel):
     not the full corpus.
     """
     sub_topic: str
-    description: str
+    description: str = ""   # empty when theme is bootstrapped from a decision row
     topic: Topic
     canonical_form: str = ""            # empty → same as sub_topic
     occurrence_count: int = 0

@@ -141,13 +141,16 @@ def test_graph_passes_through_run_date():
 
 
 def test_graph_passes_through_sheet_id():
-    # write_back is real now — patch Sheets I/O so this pass-through test
-    # doesn't require credentials.
+    # load_library and write_back are real now — patch all Sheets I/O so this
+    # pass-through test doesn't require credentials.
     state = {**MINIMAL_STATE, "sheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"}
     graph = build_graph()
     with (
         patch("documenters_cle_langchain.theme_library.build_sheets_client", return_value=MagicMock()),
+        patch("documenters_cle_langchain.theme_library.read_theme_library", return_value=[]),
+        patch("documenters_cle_langchain.feedback.read_classified_notes_decisions", return_value=[]),
         patch("documenters_cle_langchain.write_back.write_classified_notes", return_value="classified-notes-2026-03-24"),
+        patch("documenters_cle_langchain.theme_library.write_theme_library", return_value="theme-overview-2026-03-24"),
     ):
         result = graph.invoke(state)
     assert result["sheet_id"] == "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
