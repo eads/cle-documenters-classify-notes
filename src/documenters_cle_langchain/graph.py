@@ -20,6 +20,8 @@ from typing import Any, TypedDict
 
 from langgraph.graph import StateGraph, END
 
+from .ingest import IngestedDoc, SkippedDoc, run_ingest
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -72,8 +74,8 @@ class GraphState(TypedDict):
     prior_decisions: list[Any]      # list[ReviewDecision] from prior run's classified notes tab
 
     # --- ingest output (Issue #10) ---
-    ingested_docs: list[Any]        # list[IngestedDoc] — extracted, gate-passed, questions parsed
-    skipped_docs: list[Any]         # list[SkippedDoc] — failed the required-field gate
+    ingested_docs: list[IngestedDoc]    # extracted, gate-passed, questions parsed
+    skipped_docs: list[SkippedDoc]      # failed the required-field gate
 
     # --- retrieve_context output (Issue #12) ---
     retrieval_context: list[Any]    # list[QuestionContext] — per-question similar themes from library
@@ -103,7 +105,8 @@ def ingest(state: GraphState) -> dict:
     Inputs:  manifest_docs
     Outputs: ingested_docs, skipped_docs
     """
-    return {}
+    ingested, skipped = run_ingest(state["manifest_docs"])
+    return {"ingested_docs": ingested, "skipped_docs": skipped}
 
 
 def retrieve_context(state: GraphState) -> dict:

@@ -89,3 +89,41 @@ Six stub nodes: `ingest`, `retrieve_context`, `extract_candidates`, `classify_th
 - Batch vs. per-document graph: batch-in-state. Simpler graph topology; `Send` available if needed later.
 
 ---
+
+## Issue #10 — Ingest node: wrap extraction, parse individual follow-up questions
+
+**Date:** 2026-03-24
+
+**Branch:** `issue-10-ingest-node`
+
+**What was built:**
+
+`ingest.py` — the ingest node implementation and supporting types. No LLM calls; everything here is deterministic and runs without API credentials.
+
+`IngestedDoc` and `SkippedDoc` TypedDicts — the first concrete state types. `GraphState` is narrowed from `list[Any]` to `list[IngestedDoc]` / `list[SkippedDoc]` for the ingest output fields.
+
+`parse_questions(blob)` — the new behavior this issue adds. Parses the `follow_up_questions` text blob from `extraction.py` into a `list[str]` of individual question strings. Handles: numbered lists (`1.`, `1)`), bulleted lists (`-`, `*`, `•`), bare newlines, and markdown bold (`**Q?**`). Each non-empty line after stripping markers becomes one question. Single dense paragraph on one line → one question.
+
+`run_ingest(manifest_docs)` — loops over raw manifest dicts, calls `extraction.extract()`, applies the gate check, parses questions, routes to `ingested_docs` or `skipped_docs`.
+
+`ingest` node in `graph.py` updated from stub to real implementation.
+
+`tests/fixtures/hard_case_note.txt` — representative fixture note with mixed formatting in the follow-up section: two numbered items, one bold question, one bulleted item.
+
+25 new tests in `tests/test_ingest.py`. 76 total tests pass.
+
+**Key decisions:**
+
+- **Per-line = per question.** The simplest parse rule that handles real data. Multi-line questions are rare; splitting on sentence boundaries is fragile and not attempted. Revisit with LangSmith evidence after real runs.
+
+- **Markdown bold stripped, not treated as a header.** `**Q?**` appears in real notes as emphasis, not a section marker. Stripping gives a clean question string.
+
+- **`ingest.py` as its own module.** Question parser and `run_ingest` are independently testable without LangGraph. Establishes the pattern: each substantial node gets its own module (`extract_candidates.py`, `classify_themes.py`, etc.).
+
+- **LangSmith trace:** LangGraph automatically traces the node. A `log.info` summary ("X docs — Y passed, Z skipped") appears in the trace logs alongside the `ingested_docs` / `skipped_docs` state diff.
+
+**Deferred:**
+
+- Multi-paragraph question parsing (rare in practice; revisit with real run evidence).
+
+---
