@@ -127,3 +127,39 @@ Six stub nodes: `ingest`, `retrieve_context`, `extract_candidates`, `classify_th
 - Multi-paragraph question parsing (rare in practice; revisit with real run evidence).
 
 ---
+
+## Issue #11 — Theme Library: Pydantic schema and Google Sheets persistence
+
+**Date:** 2026-03-25
+
+**Branch:** `issue-11-theme-library`
+
+**What was built:**
+
+`theme_library.py` — `Topic` enum (20 national taxonomy topics), `QuestionType` enum (5 types), `ThemeRecord` Pydantic model, row serialization (`to_row` / `from_row`), tab utilities (`find_latest_theme_tab`, `theme_tab_name`), and Sheets API functions (`read_theme_library`, `write_theme_library`, `build_sheets_client`).
+
+31 new tests in `test_theme_library.py`. 107 total tests pass.
+
+**Key decisions:**
+
+- **Tidy data model.** The classified notes tab is the fact table (one row per question per run); the theme library tab is the dimension table (one row per theme). They join on `sub_topic`. Source passages are NOT stored exhaustively in the theme library — that would bloat cells and violate the tidy model. The classified notes tabs are the canonical record of all source questions. This design enables non-technical editorial staff to use pivot tables directly in Google Sheets.
+
+- **Representative passages: max 3, for display only.** `ThemeRecord.representative_passages` holds up to 3 example source questions for inline retrieval display (shown to reporters when reviewing candidates). `add_passage()` enforces the cap and deduplicates. Full passage history is in the classified notes tabs.
+
+- **Occurrence count as denormalized integer.** Stored explicitly so the library tab is self-contained for scanning — editors shouldn't need to count classified notes rows to understand theme frequency.
+
+- **Column-tolerant deserialization.** `from_row` uses header-name lookup, not positional indexing. Missing or extra columns use defaults rather than crashing. This means the schema can evolve across runs without breaking reads of older tabs.
+
+- **`str, Enum` for Topic and QuestionType.** Serialize naturally to their string values (e.g., `"HOUSING"`, `"knowledge_gap"`), iterable for use in LLM prompts.
+
+**The theme library tab is a two-way human interface.** Two distinct levels of correction:
+- *Classified notes tab* — per-question decisions (Accept / Reject / Rename), handled by the Issue #16 feedback loop.
+- *Theme library tab* — theme-level corrections. Editors can directly edit sub-topic labels, descriptions, topic assignments, and canonical forms between runs. `read_theme_library` reads the tab as-is, so any manual edits propagate automatically to the next run.
+
+**Deferred:**
+
+- Soft-rejection via a Status column in the theme library tab. Currently, editors reject a theme by deleting the row. That works for bootstrapping but leaves no record. A `Status` column with `active / rejected` would support a soft-delete audit trail — deferred until the bootstrapping phase is complete and the pattern is clear.
+
+- `ARCHITECTURE.md` updated in the same session to document the tidy data model (fact/dimension design, pivot table implications, representative passages rationale).
+
+---
