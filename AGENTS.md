@@ -6,6 +6,8 @@ Working conventions for humans and coding agents in this repository.
 
 A local-first pipeline that classifies Cleveland public meeting notes from Google Drive into civic topic categories. No web server, no database — fetch, process, write files.
 
+This describes the current implementation and should be updated as the system evolves. ARCHITECTURE.md describes the target state that we're evolving towards. HISTORY.md tracks the migration. When in doubt, ask.
+
 ## Architecture
 
 ```
