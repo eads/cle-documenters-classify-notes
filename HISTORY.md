@@ -4,6 +4,45 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #15 — write_back node: classified notes tab output
+
+**Date:** 2026-03-25
+
+**Branch:** `issue-15-write-back-classified-notes`
+
+**What was built:**
+
+`write_back.py` — the classified notes tab writer. Two public functions:
+
+`build_classified_notes_rows(classified_themes, ingested_docs) → list[list]` — pure function. Joins each `ClassifiedTheme` to its source `IngestedDoc` on `doc_id` to populate meeting date and body. Builds the full row list (header + one data row per theme). No Sheets dependency; fully testable without credentials.
+
+`write_classified_notes(classified_themes, ingested_docs, sheets, sheet_id, run_date) → str` — Sheets I/O. Creates tab `classified-notes-{run_date}`, writes the rows.
+
+15-column schema: 10 agent-filled (`Meeting date`, `Meeting body`, `Source question`, `Sub-topic`, `Topic`, `Retrieved similar themes`, `Confidence`, `Needs review`, `Question type`, `Question type: low confidence`) + 5 blank reporter decision columns (`Decision`, `Corrected sub-topic`, `Question type override`, `Proposed new question type`, `Notes`).
+
+`graph.py` `write_back` stub replaced with real implementation. Skips Sheets output when `sheet_id` is None (useful for dry runs and tests that don't need Sheets output). Theme library tab write remains a stub — that's a separate issue.
+
+34 new tests in `test_write_back.py`. 234 total tests pass.
+
+**Key decisions:**
+
+- **Dedicated `Needs review` column, not a mixed-type `Confidence` column.** The issue suggested using the confidence column with a "low" string value. Instead: `Confidence` is always a numeric float (for sorting); `Needs review` is "yes"/"" (for filtering). Mixing types in a column is awkward in Sheets and makes filtering harder. Two columns is cleaner.
+
+- **`Retrieved similar themes` as human-readable numbered lines.** Each entry formatted as `"{n}. {sub_topic} — {description} ({topic})"`, joined by newlines. Caps at 3 per question (matching the architecture spec). Returns empty string on cold start. The issue spec called this the most important column — keeping it readable without documentation was the primary constraint.
+
+- **Free text for reporter decision columns.** Dropdown validation (via Sheets batchUpdate) deferred per issue guidance. Adds API complexity for bootstrapping; free text is adequate.
+
+- **`doc_id` join, not embedding metadata in `ClassifiedTheme`.** `ClassifiedTheme` carries only `doc_id`, not the full meeting metadata. `build_classified_notes_rows` does a dict lookup against `ingested_docs`. Missing `doc_id` (shouldn't happen in normal operation) silently produces blank meeting fields rather than raising.
+
+- **`test_graph_passes_through_sheet_id` updated.** This test passed a real-looking sheet_id as a pass-through check when `write_back` was a stub. Now that `write_back` is real, passing a non-None `sheet_id` triggers Sheets API calls. The test was updated to patch `build_sheets_client` and `write_classified_notes` — the pass-through assertion itself is unchanged.
+
+**Deferred:**
+
+- Theme library tab write in `write_back` — a stub in `graph.py`. Implemented in a subsequent issue.
+- Dropdown data validation for reporter decision columns — deferred until bootstrapping is complete.
+
+---
+
 ## Project genesis — existing codebase
 
 **Date:** 2026
