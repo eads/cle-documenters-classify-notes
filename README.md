@@ -2,6 +2,9 @@
 
 Python + LangChain pipeline that fetches Cleveland public meeting notes from Google Drive, extracts structured metadata, and classifies each meeting across civic topic categories.
 
+This is the basic "start here" doc for humans. This codebase has been written in part by Codex and Claude Code (current). `AGENTS.md` describes the current architecture and will evolve as the codebase does. `ARCHITECTURE.md` describes the target state. `HISTORY.md` tracks the evolution. `CLAUDE.md` is a prompt that seeds each session with some additional context and a "table of contents" to the other files.
+
+
 ## Requirements & Setup
 
 **Prerequisites:**
