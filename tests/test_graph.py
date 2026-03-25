@@ -7,6 +7,7 @@ calls are made here (all nodes are stubs).
 from __future__ import annotations
 
 import pytest
+from unittest.mock import MagicMock, patch
 
 from documenters_cle_langchain.graph import GraphConfig, GraphState, build_graph
 
@@ -140,7 +141,13 @@ def test_graph_passes_through_run_date():
 
 
 def test_graph_passes_through_sheet_id():
+    # write_back is real now — patch Sheets I/O so this pass-through test
+    # doesn't require credentials.
     state = {**MINIMAL_STATE, "sheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"}
     graph = build_graph()
-    result = graph.invoke(state)
+    with (
+        patch("documenters_cle_langchain.theme_library.build_sheets_client", return_value=MagicMock()),
+        patch("documenters_cle_langchain.write_back.write_classified_notes", return_value="classified-notes-2026-03-24"),
+    ):
+        result = graph.invoke(state)
     assert result["sheet_id"] == "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
