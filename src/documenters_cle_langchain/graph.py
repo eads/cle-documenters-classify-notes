@@ -22,6 +22,7 @@ from langgraph.graph import StateGraph, END
 
 from .ingest import IngestedDoc, SkippedDoc, run_ingest
 from .retrieve_context import QuestionContext, run_retrieve_context
+from .extract_candidates import ThemeCandidate
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +83,7 @@ class GraphState(TypedDict):
     retrieval_context: list[QuestionContext]  # per-question similar themes from library
 
     # --- extract_candidates output (Issue #13) ---
-    candidates: list[Any]           # list[ThemeCandidate] — proposed sub-topics per question
+    candidates: list[ThemeCandidate]  # proposed sub-topics per question
 
     # --- classify_themes output (Issue #14) ---
     classified_themes: list[Any]    # list[ClassifiedTheme] — merged/new + question type + topic
@@ -115,13 +116,8 @@ def ingest(state: GraphState) -> dict:
 # See _make_retrieve_context_node below.
 
 
-def extract_candidates(state: GraphState) -> dict:
-    """LLM: extract candidate sub-topic themes from follow-up questions.
-
-    Inputs:  ingested_docs, retrieval_context
-    Outputs: candidates
-    """
-    return {}
+# extract_candidates is built as a closure inside build_graph so it can capture
+# the model name from GraphConfig. See build_graph below.
 
 
 def classify_themes(state: GraphState) -> dict:
@@ -170,6 +166,7 @@ def build_graph(config: GraphConfig | None = None) -> Any:
 
     _embedding_model = config.embedding_model
     _retrieval_k = config.retrieval_k
+    _extract_model = config.extract_model
 
     def _retrieve_context(state: GraphState) -> dict:
         """Build in-memory vector store from theme_library; retrieve top-k per question.
@@ -195,11 +192,30 @@ def build_graph(config: GraphConfig | None = None) -> Any:
         )
         return {"retrieval_context": contexts}
 
+    def _extract_candidates(state: GraphState) -> dict:
+        """LLM: extract one ThemeCandidate per follow-up question.
+
+        Inputs:  retrieval_context
+        Outputs: candidates
+
+        ChatOpenAI is instantiated lazily — only when retrieval_context is
+        non-empty — so cold-start runs don't require OPENAI_API_KEY.
+        """
+        if not state["retrieval_context"]:
+            return {"candidates": []}
+
+        from langchain_openai import ChatOpenAI
+        from .extract_candidates import _ExtractedTheme, run_extract_candidates
+
+        llm = ChatOpenAI(model=_extract_model).with_structured_output(_ExtractedTheme)
+        candidates = run_extract_candidates(state["retrieval_context"], llm)
+        return {"candidates": candidates}
+
     graph = StateGraph(GraphState)
 
     graph.add_node("ingest", ingest)
     graph.add_node("retrieve_context", _retrieve_context)
-    graph.add_node("extract_candidates", extract_candidates)
+    graph.add_node("extract_candidates", _extract_candidates)
     graph.add_node("classify_themes", classify_themes)
     graph.add_node("human_review", human_review)
     graph.add_node("write_back", write_back)

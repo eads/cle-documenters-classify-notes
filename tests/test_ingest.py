@@ -245,7 +245,35 @@ def test_extraction_fields_preserved():
 
 # ---------------------------------------------------------------------------
 # Graph integration — ingest node populates GraphState
+#
+# These tests invoke the full graph but use a document WITHOUT follow-up
+# questions so that retrieval_context stays empty and extract_candidates
+# short-circuits without making any LLM calls. This keeps the graph
+# integration tests runnable without OPENAI_API_KEY.
+#
+# Question-parsing behavior is tested directly via run_ingest above; it does
+# not need the full graph to be exercised.
 # ---------------------------------------------------------------------------
+
+# All required fields present, but no follow-up questions section.
+# Omitting the section entirely produces an empty questions list, keeping
+# retrieval_context empty so extract_candidates never fires the LLM.
+NO_QUESTIONS_DOC = """\
+Ward 10 Community Meeting
+Documenter name: Tommy Oddo
+Agency: Cleveland City Council
+Date: March 4, 2026
+See more about this meeting at Documenters.org
+
+Summary
+Residents raised concerns about public safety.
+
+Notes
+The meeting took place in the rectory of St. Mary's Church.
+
+Single Signal
+Community members are alarmed about recent violence in Collinwood.
+"""
 
 MINIMAL_STATE: GraphState = {
     "manifest_docs": [],
@@ -266,7 +294,7 @@ MINIMAL_STATE: GraphState = {
 def test_ingest_node_populates_state():
     state = {
         **MINIMAL_STATE,
-        "manifest_docs": [_manifest_doc("doc-1", FULL_DOC, "Ward 10")],
+        "manifest_docs": [_manifest_doc("doc-1", NO_QUESTIONS_DOC, "Ward 10")],
     }
     graph = build_graph()
     result = graph.invoke(state)
@@ -286,12 +314,9 @@ def test_ingest_node_skips_bad_docs():
 
 
 def test_ingest_node_questions_in_state():
-    state = {
-        **MINIMAL_STATE,
-        "manifest_docs": [_manifest_doc("doc-1", FULL_DOC)],
-    }
-    graph = build_graph()
-    result = graph.invoke(state)
-    qs = result["ingested_docs"][0]["follow_up_questions"]
+    # Question parsing is ingest logic, not graph topology — test via run_ingest
+    # directly to avoid triggering downstream LLM nodes.
+    ingested, _ = run_ingest([_manifest_doc("doc-1", FULL_DOC)])
+    qs = ingested[0]["follow_up_questions"]
     assert isinstance(qs, list)
     assert len(qs) == 2
