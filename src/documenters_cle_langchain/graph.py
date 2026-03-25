@@ -23,6 +23,7 @@ from langgraph.graph import StateGraph, END
 from .ingest import IngestedDoc, SkippedDoc, run_ingest
 from .retrieve_context import QuestionContext, run_retrieve_context
 from .extract_candidates import ThemeCandidate
+from .classify_themes import ClassifiedTheme
 
 
 # ---------------------------------------------------------------------------
@@ -86,8 +87,8 @@ class GraphState(TypedDict):
     candidates: list[ThemeCandidate]  # proposed sub-topics per question
 
     # --- classify_themes output (Issue #14) ---
-    classified_themes: list[Any]    # list[ClassifiedTheme] — merged/new + question type + topic
-    needs_review: list[Any]         # subset of classified_themes flagged for human review
+    classified_themes: list[ClassifiedTheme]  # merged/new + question type + topic
+    needs_review: list[ClassifiedTheme]       # subset flagged for human review
 
     # --- run summary, populated by write_back ---
     run_summary: dict               # counts, error list, and any run-level diagnostics
@@ -120,13 +121,8 @@ def ingest(state: GraphState) -> dict:
 # the model name from GraphConfig. See build_graph below.
 
 
-def classify_themes(state: GraphState) -> dict:
-    """LLM: merge/split decision, question type, national topic assignment.
-
-    Inputs:  candidates, retrieval_context
-    Outputs: classified_themes, needs_review
-    """
-    return {}
+# classify_themes is built as a closure inside build_graph so it can capture
+# model names and the review threshold from GraphConfig. See build_graph below.
 
 
 def human_review(state: GraphState) -> dict:
@@ -167,6 +163,9 @@ def build_graph(config: GraphConfig | None = None) -> Any:
     _embedding_model = config.embedding_model
     _retrieval_k = config.retrieval_k
     _extract_model = config.extract_model
+    _classify_model = config.classify_model
+    _question_type_model = config.question_type_model
+    _review_threshold = config.review_confidence_threshold
 
     def _retrieve_context(state: GraphState) -> dict:
         """Build in-memory vector store from theme_library; retrieve top-k per question.
@@ -211,12 +210,42 @@ def build_graph(config: GraphConfig | None = None) -> Any:
         candidates = run_extract_candidates(state["retrieval_context"], llm)
         return {"candidates": candidates}
 
+    def _classify_themes(state: GraphState) -> dict:
+        """LLM: merge/split decision, question type, national topic assignment.
+
+        Inputs:  candidates
+        Outputs: classified_themes, needs_review
+
+        Two ChatOpenAI instances are created lazily — only when candidates is
+        non-empty — so cold-start runs don't require OPENAI_API_KEY.
+        """
+        if not state["candidates"]:
+            return {"classified_themes": [], "needs_review": []}
+
+        from langchain_openai import ChatOpenAI
+        from .classify_themes import (
+            _MergeSplitDecision,
+            _QuestionTypeAndTopic,
+            run_classify_themes,
+        )
+
+        merge_llm = ChatOpenAI(model=_classify_model).with_structured_output(
+            _MergeSplitDecision
+        )
+        qt_llm = ChatOpenAI(model=_question_type_model).with_structured_output(
+            _QuestionTypeAndTopic
+        )
+        classified, needs_review = run_classify_themes(
+            state["candidates"], merge_llm, qt_llm, _review_threshold
+        )
+        return {"classified_themes": classified, "needs_review": needs_review}
+
     graph = StateGraph(GraphState)
 
     graph.add_node("ingest", ingest)
     graph.add_node("retrieve_context", _retrieve_context)
     graph.add_node("extract_candidates", _extract_candidates)
-    graph.add_node("classify_themes", classify_themes)
+    graph.add_node("classify_themes", _classify_themes)
     graph.add_node("human_review", human_review)
     graph.add_node("write_back", write_back)
 
