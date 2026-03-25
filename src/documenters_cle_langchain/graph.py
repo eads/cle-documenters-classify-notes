@@ -15,8 +15,11 @@ time via GraphConfig so LLM chains are built once and reused.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import logging
+from dataclasses import dataclass
 from typing import Any, TypedDict
+
+log = logging.getLogger(__name__)
 
 from langgraph.graph import StateGraph, END
 
@@ -137,10 +140,29 @@ def human_review(state: GraphState) -> dict:
 def write_back(state: GraphState) -> dict:
     """Write classified notes tab and updated theme library tab to Google Sheets.
 
-    Inputs:  classified_themes, needs_review, theme_library, sheet_id, run_date
+    Inputs:  classified_themes, ingested_docs, sheet_id, run_date
     Outputs: run_summary
+
+    Skips Sheets output when sheet_id is None (useful for dry runs and tests).
+    Theme library tab write is a stub — implemented in a subsequent issue.
     """
-    return {}
+    sheet_id = state.get("sheet_id")
+    if not sheet_id:
+        log.info("write_back: no sheet_id — skipping Sheets output")
+        return {"run_summary": {"sheets_written": 0}}
+
+    from .theme_library import build_sheets_client
+    from .write_back import write_classified_notes
+
+    sheets = build_sheets_client()
+    tab = write_classified_notes(
+        state["classified_themes"],
+        state["ingested_docs"],
+        sheets,
+        sheet_id,
+        state["run_date"],
+    )
+    return {"run_summary": {"classified_notes_tab": tab, "sheets_written": 1}}
 
 
 # ---------------------------------------------------------------------------
