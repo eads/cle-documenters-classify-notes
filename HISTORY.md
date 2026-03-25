@@ -163,3 +163,46 @@ Six stub nodes: `ingest`, `retrieve_context`, `extract_candidates`, `classify_th
 - `ARCHITECTURE.md` updated in the same session to document the tidy data model (fact/dimension design, pivot table implications, representative passages rationale).
 
 ---
+
+## Issue #12 — retrieve_context node: in-memory vector store and semantic retrieval
+
+**Date:** 2026-03-25
+
+**Branch:** `issue-12-retrieve-context-node`
+
+**What was built:**
+
+`retrieve_context.py` — the retrieve_context node implementation and supporting types. No LLM calls; retrieval is deterministic given the embeddings.
+
+`SimilarTheme` and `QuestionContext` TypedDicts — the output types for this node. `GraphState.retrieval_context` narrowed from `list[Any]` to `list[QuestionContext]`.
+
+`build_vector_store(themes, embeddings)` — embeds each `ThemeRecord` as `"{sub_topic}: {description}"` into an `InMemoryVectorStore`. Returns `None` on cold start (empty library) without calling the embeddings object.
+
+`retrieve_for_question(question, store, k)` — retrieves top-k similar themes for a single question. Returns `[]` if store is `None`. Handles k > number of themes gracefully.
+
+`run_retrieve_context(ingested_docs, theme_library, embeddings, k)` — builds the store and produces one `QuestionContext` per follow-up question across all ingested docs.
+
+The `retrieve_context` node in `graph.py` is now a closure (built inside `build_graph`) that captures `embedding_model` and `retrieval_k` from `GraphConfig`. `OpenAIEmbeddings` is instantiated lazily — only when the theme library is non-empty — so cold-start runs and existing graph tests don't require `OPENAI_API_KEY`.
+
+`numpy>=1.24` added to project dependencies. `InMemoryVectorStore` uses cosine similarity via numpy; it is a transitive dependency that was missing from the explicit dependency list.
+
+23 new tests in `tests/test_retrieve_context.py`. 132 total tests pass.
+
+**Key decisions:**
+
+- **Lazy embeddings in the graph node.** `OpenAIEmbeddings` requires `OPENAI_API_KEY` at construction time. Creating it eagerly in `build_graph` would break all tests that build the graph without credentials. The closure checks `theme_library` first; cold-start and test runs never touch the OpenAI client.
+
+- **`embeddings` param is injectable.** `run_retrieve_context` accepts an `Embeddings` object (or `None` for cold start), not a model name string. This lets tests inject `FakeEmbeddings` without patching. The graph node is the one place that creates the real `OpenAIEmbeddings`.
+
+- **Per-question retrieval.** One `QuestionContext` per follow-up question, not per document. More precise; scale is fine at this cadence (quarterly batch). Matches the issue decision and downstream node contracts.
+
+- **`venue_context: list[Any]` stubbed as always `[]`.** The venue context slot is typed in `QuestionContext` now so downstream nodes have a stable contract. No retrieval is performed until the Meeting/Venue Knowledge Base is in scope. This avoids a schema change when that work lands.
+
+- **`numpy` explicit in dependencies.** `InMemoryVectorStore` needs numpy for cosine similarity but langchain-core doesn't declare it as a hard dependency (it's behind a try/except `ImportError`). Making it explicit avoids a confusing runtime failure in any environment where numpy isn't coincidentally installed.
+
+**Deferred:**
+
+- Venue/institutional context retrieval — the slot is present in `QuestionContext` and the node, but always returns `[]`. Activating it requires the Meeting/Venue Knowledge Base, which needs human curation to bootstrap (see architecture spec).
+- Async retrieval — `InMemoryVectorStore` supports async; switching to `asimilarity_search_with_score` would allow parallel per-question queries. Not worth the complexity at current scale; revisit if per-run latency becomes a concern.
+
+---

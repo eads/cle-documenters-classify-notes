@@ -21,6 +21,7 @@ from typing import Any, TypedDict
 from langgraph.graph import StateGraph, END
 
 from .ingest import IngestedDoc, SkippedDoc, run_ingest
+from .retrieve_context import QuestionContext, run_retrieve_context
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +79,7 @@ class GraphState(TypedDict):
     skipped_docs: list[SkippedDoc]      # failed the required-field gate
 
     # --- retrieve_context output (Issue #12) ---
-    retrieval_context: list[Any]    # list[QuestionContext] — per-question similar themes from library
+    retrieval_context: list[QuestionContext]  # per-question similar themes from library
 
     # --- extract_candidates output (Issue #13) ---
     candidates: list[Any]           # list[ThemeCandidate] — proposed sub-topics per question
@@ -109,13 +110,9 @@ def ingest(state: GraphState) -> dict:
     return {"ingested_docs": ingested, "skipped_docs": skipped}
 
 
-def retrieve_context(state: GraphState) -> dict:
-    """Build in-memory vector store from theme_library; retrieve top-k per question.
-
-    Inputs:  ingested_docs, theme_library
-    Outputs: retrieval_context
-    """
-    return {}
+# retrieve_context is built as a closure inside build_graph so it can capture
+# the embedding model name and k from GraphConfig without hardcoding them here.
+# See _make_retrieve_context_node below.
 
 
 def extract_candidates(state: GraphState) -> dict:
@@ -171,10 +168,37 @@ def build_graph(config: GraphConfig | None = None) -> Any:
     if config is None:
         config = GraphConfig()
 
+    _embedding_model = config.embedding_model
+    _retrieval_k = config.retrieval_k
+
+    def _retrieve_context(state: GraphState) -> dict:
+        """Build in-memory vector store from theme_library; retrieve top-k per question.
+
+        Inputs:  ingested_docs, theme_library
+        Outputs: retrieval_context
+
+        OpenAIEmbeddings is instantiated lazily — only when the theme library is
+        non-empty — so cold-start runs don't require OPENAI_API_KEY. The venue
+        context slot is a stub (always empty) per the architecture spec.
+        """
+        if state["theme_library"]:
+            from langchain_openai import OpenAIEmbeddings
+            embeddings = OpenAIEmbeddings(model=_embedding_model)
+        else:
+            embeddings = None
+
+        contexts = run_retrieve_context(
+            state["ingested_docs"],
+            state["theme_library"],
+            embeddings,
+            _retrieval_k,
+        )
+        return {"retrieval_context": contexts}
+
     graph = StateGraph(GraphState)
 
     graph.add_node("ingest", ingest)
-    graph.add_node("retrieve_context", retrieve_context)
+    graph.add_node("retrieve_context", _retrieve_context)
     graph.add_node("extract_candidates", extract_candidates)
     graph.add_node("classify_themes", classify_themes)
     graph.add_node("human_review", human_review)
