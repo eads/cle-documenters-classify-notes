@@ -164,6 +164,53 @@ Six stub nodes: `ingest`, `retrieve_context`, `extract_candidates`, `classify_th
 
 ---
 
+## Issue #14 — classify_themes node: merge/split, question type, topic assignment
+
+**Date:** 2026-03-25
+
+**Branch:** `issue-14-classify-themes-node`
+
+**What was built:**
+
+`classify_themes.py` — the classify_themes node implementation. Two LLM calls per candidate, three inferences total.
+
+`_MergeSplitDecision` internal schema: `{decision, matched_theme, confidence, reasoning}`. Used with `classify_model` (gpt-5.4).
+
+`_QuestionTypeAndTopic` internal schema: `{question_type, question_type_confidence, low_confidence, proposed_new_type, topic}`. Used with `question_type_model`. Combines question type and national topic in one call — both are more mechanical than merge/split and don't confuse the model when combined.
+
+`ClassifiedTheme` Pydantic model: the full output type. Carries merge/split decision, confidence, reasoning, `needs_review` flag, question type (with low-confidence and proposed-new-type flags), and national topic. `question_type="uncertain"` is normalised to `None`.
+
+`build_merge_split_prompt(candidate) → list[dict]` — pure function. Formats retrieved similar themes as numbered lines. System prompt instructs model to lean NEW when uncertain — easier for editors to merge later than to split.
+
+`build_question_type_prompt(candidate) → list[dict]` — pure function. Shows the full 5-label taxonomy with definitions. Also shows all 20 national topic labels for the constrained lookup. Both `low_confidence` and `proposed_new_type` fields are explained in the system prompt so the model knows to use them rather than forcing a pick.
+
+`classify_one(candidate, merge_llm, qt_llm, review_threshold) → ClassifiedTheme` — runs both inferences and assembles the result.
+
+`run_classify_themes(candidates, merge_llm, qt_llm, review_threshold) → (list[ClassifiedTheme], list[ClassifiedTheme])` — classifies all candidates, returns the full list and the `needs_review` subset.
+
+`GraphState.classified_themes` and `GraphState.needs_review` narrowed from `list[Any]` to `list[ClassifiedTheme]`.
+
+39 new tests in `tests/test_classify_themes.py`. 200 total tests pass, no warnings.
+
+**Key decisions:**
+
+- **Two LLM calls, not three.** Merge/split gets its own call on `classify_model` — it's the hard judgment and should stay focused. Question type + topic are combined in a second call on `question_type_model` — both are more constrained, and topic assignment is "a constrained lookup, not open inference" per the architecture spec. Combining them doesn't degrade quality and halves the number of API calls.
+
+- **"Lean NEW when uncertain."** The merge/split system prompt explicitly instructs the model to prefer NEW when confidence is low. The reasoning: incorrect merges corrupt the Theme Library in compounding ways (a bad merge in run 1 becomes a misleading retrieval result in run 2). Incorrect splits are surfaced to editors for easy correction. This asymmetry justifies the bias.
+
+- **`question_type="uncertain"` normalised to `None`.** The model can return "uncertain" when no label fits. Rather than storing that string in `ClassifiedTheme.question_type` (which downstream code would need to handle as a special case), it's normalised to `None`. The `proposed_new_question_type` field carries the model's description if it proposed an alternative.
+
+- **`needs_review` is `confidence < threshold`, exclusive lower bound.** Confidence exactly at threshold (e.g., 0.40 with a 0.40 threshold) is NOT flagged. This matches the intent: the threshold is a floor below which we're uncertain, not a ceiling above which we're confident.
+
+- **Lazy LLM construction in graph node.** Same pattern as #12 and #13 — `ChatOpenAI` instantiated only when `candidates` is non-empty, so cold-start and test graph invocations don't require `OPENAI_API_KEY`.
+
+**Deferred:**
+
+- Question type retrieval context. Issue #14 documents the hypothesis: "no retrieval needed for question type; taxonomy is stable enough to classify from the question alone." LangSmith will confirm.
+- Confidence threshold calibration. Starting at 0.4 per the issue; to be tuned after bootstrapping runs.
+
+---
+
 ## Issue #13 — extract_candidates node: LLM theme extraction from questions
 
 **Date:** 2026-03-25
