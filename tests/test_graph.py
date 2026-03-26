@@ -154,3 +154,46 @@ def test_graph_passes_through_sheet_id():
     ):
         result = graph.invoke(state)
     assert result["sheet_id"] == "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
+
+
+# ---------------------------------------------------------------------------
+# write_back cold-start behaviour (Issue #34)
+# ---------------------------------------------------------------------------
+
+def test_write_back_skips_theme_tab_on_cold_start():
+    """Empty theme library → no theme-overview tab is written; sheets_written == 1."""
+    state = {**MINIMAL_STATE, "sheet_id": "sheet-abc"}
+    graph = build_graph()
+    mock_write_theme = MagicMock()
+    with (
+        patch("documenters_cle_langchain.theme_library.build_sheets_client", return_value=MagicMock()),
+        patch("documenters_cle_langchain.theme_library.read_theme_library", return_value=[]),
+        patch("documenters_cle_langchain.feedback.read_classified_notes_decisions", return_value=[]),
+        patch("documenters_cle_langchain.write_back.write_classified_notes", return_value="classified-notes-2026-03-24"),
+        patch("documenters_cle_langchain.theme_library.write_theme_library", mock_write_theme),
+    ):
+        result = graph.invoke(state)
+    mock_write_theme.assert_not_called()
+    assert result["run_summary"]["theme_overview_tab"] is None
+    assert result["run_summary"]["sheets_written"] == 1
+
+
+def test_write_back_writes_theme_tab_when_library_populated():
+    """Non-empty theme library → theme-overview tab is written; sheets_written == 2."""
+    from documenters_cle_langchain.theme_library import ThemeRecord, Topic
+    record = ThemeRecord(sub_topic="lead pipes", topic=Topic.UTILITIES)
+    state = {**MINIMAL_STATE, "sheet_id": "sheet-abc"}
+    graph = build_graph()
+    mock_write_theme = MagicMock(return_value="theme-overview-2026-03-24")
+    with (
+        patch("documenters_cle_langchain.theme_library.build_sheets_client", return_value=MagicMock()),
+        # load_library reads base library — return a populated record so theme_library != []
+        patch("documenters_cle_langchain.theme_library.read_theme_library", return_value=[record]),
+        patch("documenters_cle_langchain.feedback.read_classified_notes_decisions", return_value=[]),
+        patch("documenters_cle_langchain.write_back.write_classified_notes", return_value="classified-notes-2026-03-24"),
+        patch("documenters_cle_langchain.theme_library.write_theme_library", mock_write_theme),
+    ):
+        result = graph.invoke(state)
+    mock_write_theme.assert_called_once()
+    assert result["run_summary"]["theme_overview_tab"] == "theme-overview-2026-03-24"
+    assert result["run_summary"]["sheets_written"] == 2
