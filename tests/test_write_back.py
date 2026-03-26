@@ -16,7 +16,7 @@ from documenters_cle_langchain.write_back import (
     COLUMNS,
     _format_retrieved_context,
     build_classified_notes_rows,
-    classified_notes_tab_name,
+    next_classified_notes_tab_name,
     write_classified_notes,
 )
 
@@ -88,12 +88,27 @@ def make_ingested_doc(**kwargs) -> IngestedDoc:
 # Tab naming
 # ---------------------------------------------------------------------------
 
-def test_tab_name_format():
-    assert classified_notes_tab_name("2026-02-10") == "classified-notes-2026-02-10"
+def test_tab_name_first_run():
+    assert next_classified_notes_tab_name("2026-02-10", []) == "classified-notes-2026-02-10-001"
 
 
-def test_tab_prefix():
-    assert classified_notes_tab_name("2026-02-10").startswith(CLASSIFIED_NOTES_TAB_PREFIX)
+def test_tab_name_second_run():
+    existing = ["classified-notes-2026-02-10-001"]
+    assert next_classified_notes_tab_name("2026-02-10", existing) == "classified-notes-2026-02-10-002"
+
+
+def test_tab_name_ignores_other_dates():
+    existing = ["classified-notes-2026-02-09-001", "classified-notes-2026-02-09-002"]
+    assert next_classified_notes_tab_name("2026-02-10", existing) == "classified-notes-2026-02-10-001"
+
+
+def test_tab_name_ignores_other_prefixes():
+    existing = ["theme-overview-2026-02-10-001", "Sheet1"]
+    assert next_classified_notes_tab_name("2026-02-10", existing) == "classified-notes-2026-02-10-001"
+
+
+def test_tab_name_prefix():
+    assert next_classified_notes_tab_name("2026-02-10", []).startswith(CLASSIFIED_NOTES_TAB_PREFIX)
 
 
 # ---------------------------------------------------------------------------
@@ -328,8 +343,12 @@ def test_cold_start_no_retrieved_context():
 # Sheets I/O (mocked)
 # ---------------------------------------------------------------------------
 
-def _make_sheets_mock():
+def _make_sheets_mock(existing_tab_titles: list[str] | None = None):
     sheets = MagicMock()
+    titles = existing_tab_titles or []
+    sheets.spreadsheets().get().execute.return_value = {
+        "sheets": [{"properties": {"title": t}} for t in titles]
+    }
     sheets.spreadsheets().batchUpdate().execute.return_value = {}
     sheets.spreadsheets().values().update().execute.return_value = {}
     return sheets
@@ -340,13 +359,19 @@ def test_write_classified_notes_creates_tab():
     write_classified_notes([], [], sheets, "sheet-123", "2026-02-10")
     batch_call = sheets.spreadsheets().batchUpdate.call_args
     body = batch_call[1]["body"] if batch_call[1] else batch_call[0][1]
-    assert body["requests"][0]["addSheet"]["properties"]["title"] == "classified-notes-2026-02-10"
+    assert body["requests"][0]["addSheet"]["properties"]["title"] == "classified-notes-2026-02-10-001"
 
 
 def test_write_classified_notes_returns_tab_name():
     sheets = _make_sheets_mock()
     tab = write_classified_notes([], [], sheets, "sheet-123", "2026-02-10")
-    assert tab == "classified-notes-2026-02-10"
+    assert tab == "classified-notes-2026-02-10-001"
+
+
+def test_write_classified_notes_increments_on_same_day_rerun():
+    sheets = _make_sheets_mock(existing_tab_titles=["classified-notes-2026-02-10-001"])
+    tab = write_classified_notes([], [], sheets, "sheet-123", "2026-02-10")
+    assert tab == "classified-notes-2026-02-10-002"
 
 
 def test_write_classified_notes_writes_headers_for_empty_list():

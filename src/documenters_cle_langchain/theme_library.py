@@ -187,9 +187,18 @@ def find_latest_theme_tab(tab_titles: list[str]) -> str | None:
     return max(theme_tabs)
 
 
-def theme_tab_name(run_date: str) -> str:
-    """Return the tab name for a given run date."""
-    return f"{THEME_TAB_PREFIX}{run_date}"
+def next_theme_tab_name(run_date: str, existing_titles: list[str]) -> str:
+    """Return the next versioned tab name for a given run date.
+
+    Format: ``theme-overview-YYYY-MM-DD-NNN``.
+
+    Counts existing tabs that match the ``theme-overview-{run_date}-``
+    prefix and increments. First run of the day → 001, second → 002, etc.
+    Tabs from other dates or with other prefixes are ignored.
+    """
+    prefix = f"{THEME_TAB_PREFIX}{run_date}-"
+    n = sum(1 for t in existing_titles if t.startswith(prefix)) + 1
+    return f"{prefix}{n:03d}"
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +288,9 @@ def write_theme_library(
     Returns:
         The tab name that was created.
     """
-    tab = theme_tab_name(run_date)
+    metadata = sheets.spreadsheets().get(spreadsheetId=sheet_id).execute()
+    existing_titles = [s["properties"]["title"] for s in metadata.get("sheets", [])]
+    tab = next_theme_tab_name(run_date, existing_titles)
 
     sheets.spreadsheets().batchUpdate(
         spreadsheetId=sheet_id,
