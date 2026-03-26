@@ -4,6 +4,29 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #19 — Client documentation: system diagram, plain-language explanation, sheet guide
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-19-client-docs`
+
+**What was built:**
+
+Two new files in `docs/`:
+
+**`docs/client-guide.md`** — the primary editorial reference. Sections: what the system does; the Theme Library (what it is, why it grows); the Google Sheet overview (both tab types); a column-by-column reference for the classified notes tab; how to fill in a Decision row (Accept / Reject / Rename) with detail on when to use each; why "Retrieved similar themes" matters for Rename decisions; what happens to decisions on the next run; a Mermaid diagram of the editorial feedback loop; when and how to trigger a run; a quick-reference table.
+
+**`docs/client-slides.md`** — a Marp slide deck (~12 slides) covering the same material in presentation form. Slides: what problem this solves; what the system reads; what it produces; the Theme Library; how to read a classified-notes row; retrieved similar themes; filling in a decision row; question types; the feedback loop; when to trigger; quick reference. Renders to HTML via `pnpm dlx @marp-team/marp-cli docs/client-slides.md --html`. PDF rendering requires a Chrome/Puppeteer environment not available in this WSL2 dev setup — the `--pdf` flag works in standard CI.
+
+**Key decisions:**
+
+- **Organized around the Sheet.** The issue specified the Sheet guide as primary. Both documents lead with the Sheet and treat the system description as context, not the focus.
+- **Mermaid in the guide, ASCII art in the slides.** The issue asks for a Mermaid diagram renderable in GitHub — it's in `client-guide.md` using a fenced `mermaid` block. Marp doesn't render Mermaid natively without plugins, so the slides use a simple ASCII art flowchart that conveys the same loop without a build dependency.
+- **No screenshot placeholders.** The issue notes that screenshots/video will be provided separately by the operator. The triggering section explains when and what to expect; the how-to-click instructions are left to the operator supplement.
+- **Question types included in both docs.** The taxonomy is useful editorial context — knowing the difference between "skepticism" and "accountability" helps reporters make overrides thoughtfully.
+
+---
+
 ## Issue #50 — Apply sheet formatting on write (frozen header, column widths, text wrap)
 
 **Date:** 2026-03-26
