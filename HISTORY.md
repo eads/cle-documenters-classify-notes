@@ -4,6 +4,42 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #50 — Apply sheet formatting on write (frozen header, column widths, text wrap)
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-50-sheet-formatting`
+
+**What was built:**
+
+Sheet formatting is now applied immediately after each tab is written. No schema changes; no new modules.
+
+**`format_tab` helper in `write_back.py`**
+
+A single `format_tab(sheets, sheet_id, tab_sheet_id, column_widths, wrap_columns)` function batches all formatting into one `batchUpdate` call: frozen header row (`updateSheetProperties`), bold header row (`repeatCell` on row 0), per-column pixel widths (`updateDimensionProperties` per column), and text-wrap on specified columns (`repeatCell` with `wrapStrategy: WRAP`). Everything is batched; no extra round-trips.
+
+**`write_classified_notes` (write_back.py)**
+
+Captures the integer `sheetId` from the `addSheet` response and calls `format_tab` after the data write. `_COLUMN_WIDTHS` (17 entries, one per `COLUMNS`) and `_WRAP_COLUMNS` (Source question and Retrieved similar themes) are module-level constants derived from the `COLUMNS` list so they stay in sync automatically.
+
+**`write_theme_library` (theme_library.py)**
+
+Same pattern: captures `sheetId` from `addSheet` response, calls `format_tab` after the data write. `_COLUMN_WIDTHS` and `_WRAP_COLUMNS` are defined in `theme_library.py` against its own `COLUMNS`. The `format_tab` call uses a deferred import (`from .write_back import format_tab` inside the function body) to avoid a circular import — `write_back.py` already imports `ThemeRecord` from `theme_library.py` at module level.
+
+**Tests**
+
+Mock helper functions in `test_write_back.py` and `test_theme_library.py` were updated to use the `.return_value` chain pattern rather than calling `()` during setup. The old `()` pattern recorded a setup call in `call_args_list` that shifted indices and inflated `call_count`. The `.return_value` pattern sets up return values without recording calls, making count and index assertions reliable.
+
+9 new unit tests for `format_tab` (freeze request, bold request, column width count and values, wrap request count and column targeting, sheetId threading). 2 integration-style tests (`test_write_classified_notes_applies_formatting`, `test_write_theme_library_applies_formatting`) confirm two batchUpdate calls per write (addSheet + format). 2 structural tests (`_COLUMN_WIDTHS` length matches `COLUMNS`, wrap indices are valid). 333 total pass (5 skipped, unchanged).
+
+**Key decisions:**
+
+- **Deferred import for circular dep.** `theme_library.py` can't import `format_tab` at module level without creating a cycle. Deferred import inside `write_theme_library` is safe because by the time the function is called, both modules are fully initialized. Alternative (new shared module) would add a file for a single function.
+- **`.return_value` mock pattern.** The old `sheets.spreadsheets().batchUpdate().execute.return_value = …` pattern calls `batchUpdate()` during setup, which muddies call counts and `call_args_list` indices in subsequent assertions. Switching to `sheets.spreadsheets.return_value.batchUpdate.return_value.execute.return_value = …` avoids this. Noted in inline comments so future test authors don't regress.
+- **Sub-topic description width.** That column isn't in the issue's column-width spec (it was added in #53, after #50 was written). Using 200px — wider than Medium but narrower than Source question — as a reasonable default.
+
+---
+
 ## Issue #53 — Theme overview schema: multi-valued topics, drop canonical_form, populate description
 
 **Date:** 2026-03-26
