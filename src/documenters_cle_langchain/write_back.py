@@ -31,6 +31,7 @@ from typing import Any
 
 from .classify_themes import ClassifiedTheme
 from .ingest import IngestedDoc
+from .theme_library import ThemeRecord
 
 log = logging.getLogger(__name__)
 
@@ -146,6 +147,38 @@ def build_classified_notes_rows(
         ])
 
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Library description enrichment
+# ---------------------------------------------------------------------------
+
+
+def enrich_library_descriptions(
+    library: list[ThemeRecord],
+    classified_themes: list[ClassifiedTheme],
+) -> None:
+    """Seed missing descriptions in library records from the current run's classified themes.
+
+    Mutates records in place. Only updates records whose description is currently empty.
+
+    This handles the "original sin" case where themes were created before the
+    classified-notes tab had a Sub-topic description column, so all prior
+    ReviewDecision rows carry description="" and apply_decisions can never seed
+    them.  By enriching here — after decisions are applied but before the
+    theme-overview tab is written — we ensure descriptions appear in the
+    library on the same run that first produces a matching classified theme,
+    rather than requiring an additional run.
+
+    Descriptions are LLM-generated metadata, not human approval decisions, so
+    there is no reason to gate them behind the 2-run review cycle.
+    """
+    if not classified_themes:
+        return
+    desc_by_subtopic = {ct.sub_topic: ct.description for ct in classified_themes if ct.description}
+    for record in library:
+        if not record.description:
+            record.description = desc_by_subtopic.get(record.sub_topic, "")
 
 
 # ---------------------------------------------------------------------------

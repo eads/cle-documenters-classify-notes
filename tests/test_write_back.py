@@ -11,11 +11,13 @@ import pytest
 
 from documenters_cle_langchain.classify_themes import ClassifiedTheme
 from documenters_cle_langchain.ingest import IngestedDoc
+from documenters_cle_langchain.theme_library import ThemeRecord, Topic
 from documenters_cle_langchain.write_back import (
     CLASSIFIED_NOTES_TAB_PREFIX,
     COLUMNS,
     _format_retrieved_context,
     build_classified_notes_rows,
+    enrich_library_descriptions,
     next_classified_notes_tab_name,
     write_classified_notes,
 )
@@ -393,3 +395,54 @@ def test_write_classified_notes_writes_data_rows():
     body = update_call[1]["body"] if update_call[1] else update_call[0][2]
     written_rows = body["values"]
     assert len(written_rows) == 2  # header + 1 data row
+
+
+# ---------------------------------------------------------------------------
+# enrich_library_descriptions
+# ---------------------------------------------------------------------------
+
+def _make_library_record(sub_topic: str, description: str = "") -> ThemeRecord:
+    return ThemeRecord(sub_topic=sub_topic, topics=[Topic.HOUSING], description=description)
+
+
+def test_enrich_fills_empty_description():
+    """Library record with no description gets it from a matching classified theme."""
+    record = _make_library_record("lead pipe replacement funding")
+    theme = make_classified_theme(
+        sub_topic="lead pipe replacement funding",
+        description="Funding gaps for replacing lead service lines.",
+    )
+    enrich_library_descriptions([record], [theme])
+    assert record.description == "Funding gaps for replacing lead service lines."
+
+
+def test_enrich_does_not_overwrite_existing_description():
+    """Records with an existing description are not changed."""
+    record = _make_library_record("lead pipe replacement funding", description="Original.")
+    theme = make_classified_theme(
+        sub_topic="lead pipe replacement funding",
+        description="Different description.",
+    )
+    enrich_library_descriptions([record], [theme])
+    assert record.description == "Original."
+
+
+def test_enrich_ignores_unmatched_themes():
+    """A classified theme whose sub_topic doesn't match any library record is skipped."""
+    record = _make_library_record("school closure process")
+    theme = make_classified_theme(sub_topic="lead pipe replacement funding")
+    enrich_library_descriptions([record], [theme])
+    assert record.description == ""
+
+
+def test_enrich_skips_classified_themes_with_empty_description():
+    """A classified theme with an empty description does not blank a library description."""
+    record = _make_library_record("lead pipe replacement funding", description="Original.")
+    theme = make_classified_theme(sub_topic="lead pipe replacement funding", description="")
+    enrich_library_descriptions([record], [theme])
+    assert record.description == "Original."
+
+
+def test_enrich_no_op_on_empty_inputs():
+    enrich_library_descriptions([], [])
+    enrich_library_descriptions([_make_library_record("a")], [])
