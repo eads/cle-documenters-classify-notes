@@ -4,6 +4,28 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #23 — text_extract.py: preserve hyperlink URLs from Google Docs
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-23-preserve-hyperlinks`
+
+**What was built:**
+
+`_run_text(elem)` helper in `text_extract.py`. Checks `textStyle.link.url` on each paragraph element. When a linked run has non-blank anchor text, emits `anchor text (url)`. Bare text runs and runs with blank anchor text are returned as-is.
+
+`_paragraph` now calls `_run_text` instead of inlining `elem.get("textRun", {}).get("content", "")`.
+
+4 new tests in `test_text_extract.py` using a `_linked_paragraph` fixture helper that builds paragraphs with mixed linked and plain runs. 292 total pass.
+
+**Key decisions:**
+
+- **`content.strip()` guards the URL append.** A linked run with blank or whitespace-only anchor text (e.g. a link on an empty formatting run) does not emit a bare `(url)` in the output. This keeps the text clean for runs that exist for styling rather than content.
+
+- **`content.rstrip("\n")` before appending.** The paragraph-terminal `\n` that Google Docs injects into the last run would otherwise produce `text\n (url)`. Stripping it per-run before appending avoids the issue without changing the existing end-of-paragraph `rstrip("\n")` on the assembled text.
+
+---
+
 ## Issue #39 — Classified notes column order, renames, numeric QT confidence
 
 **Date:** 2026-03-26
