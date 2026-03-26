@@ -5,7 +5,7 @@ One row per processed follow-up question.
 
 Column schema:
   Agent-filled (read-only for reporters):
-    Meeting date, Meeting body, Source question, Sub-topic, Topic,
+    Meeting date, Meeting body, Doc URL, Source question, Sub-topic, Topic,
     Retrieved similar themes, Confidence, Needs review,
     Question type, Question type: low confidence
   Reporter decision columns (blank on write):
@@ -36,6 +36,7 @@ COLUMNS = [
     # --- agent-filled ---
     "Meeting date",
     "Meeting body",
+    "Doc URL",
     "Source question",
     "Sub-topic",
     "Topic",
@@ -102,9 +103,11 @@ def build_classified_notes_rows(
         doc = doc_lookup.get(theme.doc_id)
         meeting_date = ""
         meeting_body = ""
+        doc_url = ""
         if doc:
             meeting_date = doc["date"] or doc["date_raw"] or ""
             meeting_body = doc["agency"] or ""
+            doc_url = doc["web_url"] or ""
 
         qt_low_confidence = (
             "yes"
@@ -115,6 +118,7 @@ def build_classified_notes_rows(
         rows.append([
             meeting_date,
             meeting_body,
+            doc_url,
             theme.source_question,
             theme.sub_topic,
             theme.topic,

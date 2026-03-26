@@ -101,13 +101,14 @@ def test_tab_prefix():
 # ---------------------------------------------------------------------------
 
 def test_column_count():
-    assert len(COLUMNS) == 15
+    assert len(COLUMNS) == 16
 
 
 def test_column_headers_match_spec():
     assert COLUMNS == [
         "Meeting date",
         "Meeting body",
+        "Doc URL",
         "Source question",
         "Sub-topic",
         "Topic",
@@ -186,6 +187,12 @@ def test_data_row_meeting_body_from_ingested_doc():
     rows = build_classified_notes_rows([make_classified_theme()], [make_ingested_doc()])
     row = rows[1]
     assert row[COLUMNS.index("Meeting body")] == "Cleveland City Council"
+
+
+def test_data_row_doc_url_from_ingested_doc():
+    rows = build_classified_notes_rows([make_classified_theme()], [make_ingested_doc()])
+    row = rows[1]
+    assert row[COLUMNS.index("Doc URL")] == "https://example.com/doc-001"
 
 
 def test_data_row_source_question():
@@ -282,6 +289,7 @@ def test_missing_doc_id_leaves_meeting_fields_blank():
     row = rows[1]
     assert row[COLUMNS.index("Meeting date")] == ""
     assert row[COLUMNS.index("Meeting body")] == ""
+    assert row[COLUMNS.index("Doc URL")] == ""
 
 
 def test_date_raw_fallback_when_date_is_none():
