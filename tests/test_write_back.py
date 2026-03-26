@@ -439,6 +439,21 @@ def test_format_tab_includes_bold_header_request():
     assert bold_reqs[0]["repeatCell"]["cell"]["userEnteredFormat"]["textFormat"]["bold"] is True
 
 
+def test_format_tab_header_row_wraps():
+    """Header row repeatCell request includes wrapStrategy: WRAP alongside bold."""
+    sheets = MagicMock()
+    sheets.spreadsheets().batchUpdate().execute.return_value = {}
+    format_tab(sheets, "sheet-id", 42, [], [])
+    body = sheets.spreadsheets().batchUpdate.call_args.kwargs["body"]
+    header_req = next(
+        r for r in body["requests"]
+        if "repeatCell" in r and "startRowIndex" in r["repeatCell"]["range"]
+    )
+    fmt = header_req["repeatCell"]["cell"]["userEnteredFormat"]
+    assert fmt["wrapStrategy"] == "WRAP"
+    assert fmt["textFormat"]["bold"] is True
+
+
 def test_format_tab_column_width_request_count():
     sheets = MagicMock()
     sheets.spreadsheets().batchUpdate().execute.return_value = {}
@@ -458,13 +473,22 @@ def test_format_tab_column_widths_are_correct():
     assert width_reqs[1]["updateDimensionProperties"]["properties"]["pixelSize"] == 400
 
 
+def _column_wrap_reqs(body: dict) -> list[dict]:
+    """Extract wrap requests that target a column range (not the header row)."""
+    return [
+        r for r in body["requests"]
+        if "repeatCell" in r
+        and "startColumnIndex" in r["repeatCell"]["range"]
+        and "wrapStrategy" in r["repeatCell"]["cell"]["userEnteredFormat"]
+    ]
+
+
 def test_format_tab_wrap_request_count():
     sheets = MagicMock()
     sheets.spreadsheets().batchUpdate().execute.return_value = {}
     format_tab(sheets, "sheet-id", 42, [], [2, 16])
     body = sheets.spreadsheets().batchUpdate.call_args.kwargs["body"]
-    wrap_reqs = [r for r in body["requests"] if "repeatCell" in r and "wrapStrategy" in r["repeatCell"]["cell"]["userEnteredFormat"]]
-    assert len(wrap_reqs) == 2
+    assert len(_column_wrap_reqs(body)) == 2
 
 
 def test_format_tab_wrap_targets_correct_columns():
@@ -472,9 +496,9 @@ def test_format_tab_wrap_targets_correct_columns():
     sheets.spreadsheets().batchUpdate().execute.return_value = {}
     format_tab(sheets, "sheet-id", 42, [], [5])
     body = sheets.spreadsheets().batchUpdate.call_args.kwargs["body"]
-    wrap_reqs = [r for r in body["requests"] if "repeatCell" in r and "wrapStrategy" in r["repeatCell"]["cell"]["userEnteredFormat"]]
-    assert wrap_reqs[0]["repeatCell"]["range"]["startColumnIndex"] == 5
-    assert wrap_reqs[0]["repeatCell"]["range"]["endColumnIndex"] == 6
+    col_wraps = _column_wrap_reqs(body)
+    assert col_wraps[0]["repeatCell"]["range"]["startColumnIndex"] == 5
+    assert col_wraps[0]["repeatCell"]["range"]["endColumnIndex"] == 6
 
 
 def test_format_tab_uses_correct_sheet_id():

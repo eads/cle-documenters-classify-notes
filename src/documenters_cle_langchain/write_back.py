@@ -66,7 +66,7 @@ _COLUMN_WIDTHS = [
     80,   # Meeting date
     150,  # Meeting body
     300,  # Source question
-    80,   # Topic
+    130,  # Topic
     150,  # Sub-topic
     200,  # Sub-topic description
     80,   # Sub-topic confidence
@@ -85,6 +85,8 @@ _COLUMN_WIDTHS = [
 # Columns that get text-wrap enabled (long free-text content).
 _WRAP_COLUMNS = [
     COLUMNS.index("Source question"),
+    COLUMNS.index("Sub-topic"),
+    COLUMNS.index("Sub-topic description"),
     COLUMNS.index("Retrieved similar themes"),
 ]
 
@@ -214,12 +216,12 @@ def format_tab(
         }
     })
 
-    # Bold the header row.
+    # Bold and wrap the header row.
     requests.append({
         "repeatCell": {
             "range": {"sheetId": tab_sheet_id, "startRowIndex": 0, "endRowIndex": 1},
-            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
-            "fields": "userEnteredFormat.textFormat.bold",
+            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}, "wrapStrategy": "WRAP"}},
+            "fields": "userEnteredFormat.textFormat.bold,userEnteredFormat.wrapStrategy",
         }
     })
 
