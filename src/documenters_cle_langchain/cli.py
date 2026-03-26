@@ -23,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pipeline = subparsers.add_parser(
         "pipeline",
-        help="Run the full pipeline: dedup → extract → gate → classify.",
+        help="Run the full LangGraph pipeline: ingest → retrieve → extract → classify → write.",
     )
     pipeline.add_argument(
         "--manifest", type=Path, required=True,
@@ -31,37 +31,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pipeline.add_argument(
         "--out", type=Path, required=True,
-        help="Output JSON path for pipeline results.",
-    )
-    pipeline.add_argument(
-        "--model", default="gpt-5-mini",
-        help="OpenAI model for the civic infrastructure classifier.",
-    )
-    pipeline.add_argument(
-        "--fallback-model", default="gpt-5.4",
-        help="Stronger model used for ambiguous docs (score in [0.3, 0.7]).",
-    )
-    pipeline.add_argument(
-        "--csv-out", type=Path, default=None,
-        help="Optional CSV output: web_url, name, date, agency, <topic>_score per row.",
+        help="Output JSON path for run summary.",
     )
     pipeline.add_argument(
         "--sheet-id",
         default=os.environ.get("CLASSIFIER_OUTPUT_SHEET"),
-        help="Existing Google Sheet ID to write results to as a new tab (defaults to CLASSIFIER_OUTPUT_SHEET env var).",
+        help="Google Sheet ID for Sheets output (defaults to CLASSIFIER_OUTPUT_SHEET env var).",
     )
     pipeline.add_argument(
-        "--year", type=int, default=None,
-        help="Year filter applied during fetch — used in the tab title.",
-    )
-    pipeline.add_argument(
-        "--month", default=None,
-        help="Month filter applied during fetch — used in the tab title.",
-    )
-    pipeline.add_argument(
-        "--impersonate",
-        default=os.environ.get("GOOGLE_IMPERSONATE_USER"),
-        help="Email of user to impersonate when writing the sheet (requires domain-wide delegation).",
+        "--run-date",
+        default=None,
+        help="ISO date (YYYY-MM-DD) used for output tab naming. Defaults to today.",
     )
 
     dedup = subparsers.add_parser(
@@ -171,47 +151,56 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if not failures else 1
 
     if args.command == "pipeline":
-        from .pipeline import run_pipeline
-        from .classifiers import MeetingClassifier
-        import dataclasses
+        import datetime
+        from .graph import build_graph
 
-        classifier = MeetingClassifier(model=args.model, fallback_model=args.fallback_model)
-        result = run_pipeline(manifest_path=args.manifest, classifier=classifier)
+        manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+        run_date = args.run_date or datetime.date.today().isoformat()
 
-        c = result.counts
+        graph = build_graph()
+        result = graph.invoke({
+            "manifest_docs": manifest,
+            "sheet_id": args.sheet_id,
+            "run_date": run_date,
+            "theme_library": [],
+            "prior_decisions": [],
+            "ingested_docs": [],
+            "skipped_docs": [],
+            "retrieval_context": [],
+            "candidates": [],
+            "classified_themes": [],
+            "needs_review": [],
+            "run_summary": {},
+        })
+
+        ingested = result.get("ingested_docs", [])
+        skipped = result.get("skipped_docs", [])
+        classified = result.get("classified_themes", [])
+        needs_review = result.get("needs_review", [])
+        summary = result.get("run_summary", {})
+
         print(
             f"pipeline done — "
-            f"dedup_removed={c.dedup_decisions} "
-            f"total={c.total_after_dedup} "
-            f"passed={c.passed_gate} "
-            f"skipped={c.skipped} "
-            f"any_topic_match={c.any_topic_match}"
+            f"ingested={len(ingested)} "
+            f"skipped={len(skipped)} "
+            f"classified={len(classified)} "
+            f"needs_review={len(needs_review)}"
         )
-        if result.skipped:
+        if skipped:
             print("skipped docs:")
-            for s in result.skipped:
-                print(f"  {s.name} missing={s.missing_fields}")
+            for s in skipped:
+                print(f"  {s['doc_id']} missing={list(s['missing_fields'])}")
 
         output = {
-            "counts": dataclasses.asdict(result.counts),
-            "results": [dataclasses.asdict(r) for r in result.results],
-            "skipped": [dataclasses.asdict(s) for s in result.skipped],
+            "run_date": run_date,
+            "ingested": len(ingested),
+            "skipped": len(skipped),
+            "classified": len(classified),
+            "run_summary": summary,
         }
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(f"results written to {args.out}")
-        if args.csv_out:
-            _write_csv(result.results, args.csv_out)
-            print(f"CSV written to {args.csv_out}")
-        if args.sheet_id:
-            from .gsheets import upload_results
-            url = upload_results(
-                [dataclasses.asdict(r) for r in result.results],
-                sheet_id=args.sheet_id,
-                tab_title=_tab_title(args.year, args.month),
-                impersonate=args.impersonate,
-            )
-            print(f"results written to sheet: {url}")
+        print(f"run summary written to {args.out}")
         return 0
 
     if args.command == "upload":
@@ -274,37 +263,6 @@ def _dedup_manifest(rows: list[dict]) -> tuple[list[dict], int, list]:
     deduped_ids = {d.doc_id for d in deduped}
     result = [r for r in rows if r["doc_id"] in deduped_ids]
     return result, len(rows) - len(result), decisions
-
-
-def _score_label(score: float) -> str:
-    from .classifiers import AMBIGUOUS_LO, AMBIGUOUS_HI
-    if score > AMBIGUOUS_HI:
-        return "certain"
-    if score < AMBIGUOUS_LO:
-        return "unlikely"
-    return "ambiguous"
-
-
-def _write_csv(results: list, path: Path) -> None:
-    import csv
-    if not results:
-        return
-    slugs = list(results[0].topics.keys())
-    category_cols = []
-    for s in slugs:
-        category_cols += [f"{s}_score", f"{s}_label", f"{s}_identified"]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["web_url", "name", "date", "agency", "model_used"] + category_cols)
-        for r in results:
-            row = [r.web_url, r.name, r.date or r.date_raw, r.agency, r.model_used]
-            for s in slugs:
-                cat = r.topics[s]
-                row.append(cat["score"])
-                row.append(_score_label(cat["score"]))
-                row.append("; ".join(cat.get("identified", [])))
-            writer.writerow(row)
 
 
 def _render_review(decisions: list) -> str:

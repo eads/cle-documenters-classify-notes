@@ -51,14 +51,16 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/credentials.json
+          LANGSMITH_TRACING: "true"
+          LANGSMITH_ENDPOINT: "https://api.smith.langchain.com"
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_PROJECT: ${{ secrets.LANGSMITH_PROJECT }}
         run: |
-          MONTH_FLAG=""
-          if [ -n "${{ inputs.month }}" ]; then
-            MONTH_FLAG="--month ${{ inputs.month }}"
-          fi
           uv run documenters-cle-langchain pipeline \
             --manifest /tmp/manifest.json \
             --out /tmp/results.json \
-            --sheet-id ${{ secrets.CLASSIFIER_OUTPUT_SHEET }} \
-            --year ${{ inputs.year }} \
-            $MONTH_FLAG
+            --sheet-id ${{ secrets.CLASSIFIER_OUTPUT_SHEET }}
+
+      - name: Clean up credentials
+        if: always()
+        run: rm -f /tmp/credentials.json

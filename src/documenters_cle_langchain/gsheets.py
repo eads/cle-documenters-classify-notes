@@ -67,11 +67,14 @@ def upload_results(
     return url
 
 
+_AMBIGUOUS_LO = 0.3
+_AMBIGUOUS_HI = 0.7
+
+
 def _score_label(score: float) -> str:
-    from .classifiers import AMBIGUOUS_LO, AMBIGUOUS_HI
-    if score > AMBIGUOUS_HI:
+    if score > _AMBIGUOUS_HI:
         return "certain"
-    if score < AMBIGUOUS_LO:
+    if score < _AMBIGUOUS_LO:
         return "unlikely"
     return "ambiguous"
 
