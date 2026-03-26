@@ -4,6 +4,56 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #18 — CLI and GitHub Actions: wire new graph, remove old pipeline
+
+**Date:** 2026-03-25
+
+**Branch:** `issue-18-cli-github-actions`
+
+**What was built:**
+
+`cli.py pipeline` now invokes the LangGraph graph instead of the old `pipeline.py` / `classifiers.py` path. The command signature is simpler:
+
+```
+uv run documenters-cle-langchain pipeline \
+    --manifest /tmp/manifest.json \
+    --out /tmp/results.json \
+    --sheet-id $SHEET_ID
+```
+
+Removed flags: `--model`, `--fallback-model`, `--csv-out`, `--year`, `--month`, `--impersonate`. Added: `--run-date` (optional, defaults to today's ISO date). The graph handles model selection via `GraphConfig`; Sheets tab names are derived from `run_date`.
+
+The handler builds a `GraphState` from the manifest and invokes `build_graph().invoke(state)`. Run summary is written to `--out` as a small JSON diagnostic (counts, `run_summary` from `write_back`). Primary output goes to Sheets when `--sheet-id` is set.
+
+`pipeline.py` and `classifiers.py` deleted. No legacy wrappers.
+
+`gsheets.py` — `_score_label` imported `AMBIGUOUS_LO` / `AMBIGUOUS_HI` from `classifiers.py`. Inlined the constants (`0.3` / `0.7`) directly in `gsheets.py`. The `upload` CLI command and its `gsheets.py` helper are still present — they serve a different purpose (re-uploading a historical results JSON) and were not in scope for removal.
+
+`classify.yml` — three changes:
+1. Removed `--year` / `--month` flags from the pipeline step. Tab naming is now driven by `--run-date` (or today's date by default).
+2. Added LangSmith env vars: `LANGSMITH_TRACING`, `LANGSMITH_ENDPOINT`, `LANGSMITH_API_KEY` (from secret), `LANGSMITH_PROJECT` (from secret).
+3. Added `Clean up credentials` step (`if: always()`) to remove `/tmp/credentials.json` after the job, regardless of success or failure.
+
+`.env.example` already had all LangSmith vars documented — no change needed.
+
+276 tests pass, 5 integration stubs skip.
+
+**Key decisions:**
+
+- **Kept `gsheets.py` and `test_gsheets.py` as-is.** The `upload` command still uploads old-format results to Sheets and `gsheets.py` serves it. Removing it is out of scope for this issue.
+
+- **`--run-date` defaults to today.** The old interface used `--year` / `--month` to build a tab title. The new graph uses an ISO date. For the `classify.yml` workflow, we just let it default to the date the workflow runs — which is what we want.
+
+- **LangSmith secrets are `LANGSMITH_API_KEY` and `LANGSMITH_PROJECT`.** Matches the `.env.example` naming convention (the `LANGSMITH_*` prefix is the modern SDK convention; `LANGCHAIN_*` also works but is legacy).
+
+**Deferred:**
+
+- The `upload` command and `gsheets.py` are now dead weight (the new graph writes to Sheets directly). They can be cleaned up in a future issue once we confirm the new pipeline is stable in production.
+
+- The `--csv-out` flag is gone. If CSV export is needed later, it can be added as a post-processing step reading the classified notes tab from Sheets.
+
+---
+
 ## Issue #17 — End-to-end fixture tests
 
 **Date:** 2026-03-25
