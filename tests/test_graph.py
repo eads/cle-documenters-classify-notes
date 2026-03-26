@@ -179,7 +179,12 @@ def test_write_back_skips_theme_tab_on_cold_start():
 
 
 def test_write_back_writes_theme_tab_when_library_populated():
-    """Non-empty theme library → theme-overview tab is written; sheets_written == 2."""
+    """Non-empty theme library → theme-overview tab is written; sheets_written == 2.
+
+    Patches OpenAIEmbeddings so the test does not require OPENAI_API_KEY (Issue #41).
+    The embeddings object is passed to run_retrieve_context but MINIMAL_STATE has
+    no ingested_docs, so retrieval does nothing — we only care about write_back.
+    """
     from documenters_cle_langchain.theme_library import ThemeRecord, Topic
     record = ThemeRecord(sub_topic="lead pipes", topic=Topic.UTILITIES)
     state = {**MINIMAL_STATE, "sheet_id": "sheet-abc"}
@@ -192,6 +197,8 @@ def test_write_back_writes_theme_tab_when_library_populated():
         patch("documenters_cle_langchain.feedback.read_classified_notes_decisions", return_value=[]),
         patch("documenters_cle_langchain.write_back.write_classified_notes", return_value="classified-notes-2026-03-24"),
         patch("documenters_cle_langchain.theme_library.write_theme_library", mock_write_theme),
+        # Prevent OpenAIEmbeddings from requiring OPENAI_API_KEY at construction time
+        patch("langchain_openai.OpenAIEmbeddings", return_value=MagicMock()),
     ):
         result = graph.invoke(state)
     mock_write_theme.assert_called_once()
