@@ -180,7 +180,7 @@ def apply_decisions(
     library: dict[str, ThemeRecord] = {r.sub_topic: r for r in base_library}
 
     for dec in decisions:
-        decision = dec["decision"].strip()
+        decision = dec["decision"].strip().title()
 
         if not decision or decision == DECISION_REJECT:
             continue
