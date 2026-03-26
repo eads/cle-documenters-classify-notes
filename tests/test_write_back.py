@@ -15,9 +15,12 @@ from documenters_cle_langchain.theme_library import ThemeRecord, Topic
 from documenters_cle_langchain.write_back import (
     CLASSIFIED_NOTES_TAB_PREFIX,
     COLUMNS,
+    _COLUMN_WIDTHS,
+    _WRAP_COLUMNS,
     _format_retrieved_context,
     build_classified_notes_rows,
     enrich_library_descriptions,
+    format_tab,
     next_classified_notes_tab_name,
     write_classified_notes,
 )
@@ -347,20 +350,25 @@ def test_cold_start_no_retrieved_context():
 # ---------------------------------------------------------------------------
 
 def _make_sheets_mock(existing_tab_titles: list[str] | None = None):
+    # Use .return_value chains rather than calling () to avoid recording setup calls
+    # in call_args_list, which would confuse index-based assertions.
     sheets = MagicMock()
     titles = existing_tab_titles or []
-    sheets.spreadsheets().get().execute.return_value = {
+    sheets.spreadsheets.return_value.get.return_value.execute.return_value = {
         "sheets": [{"properties": {"title": t}} for t in titles]
     }
-    sheets.spreadsheets().batchUpdate().execute.return_value = {}
-    sheets.spreadsheets().values().update().execute.return_value = {}
+    sheets.spreadsheets.return_value.batchUpdate.return_value.execute.return_value = {
+        "replies": [{"addSheet": {"properties": {"sheetId": 1}}}]
+    }
+    sheets.spreadsheets.return_value.values.return_value.update.return_value.execute.return_value = {}
     return sheets
 
 
 def test_write_classified_notes_creates_tab():
     sheets = _make_sheets_mock()
     write_classified_notes([], [], sheets, "sheet-123", "2026-02-10")
-    batch_call = sheets.spreadsheets().batchUpdate.call_args
+    # First batchUpdate call is addSheet; second is formatting.
+    batch_call = sheets.spreadsheets().batchUpdate.call_args_list[0]
     body = batch_call[1]["body"] if batch_call[1] else batch_call[0][1]
     assert body["requests"][0]["addSheet"]["properties"]["title"] == "classified-notes-2026-02-10-001"
 
@@ -395,6 +403,107 @@ def test_write_classified_notes_writes_data_rows():
     body = update_call[1]["body"] if update_call[1] else update_call[0][2]
     written_rows = body["values"]
     assert len(written_rows) == 2  # header + 1 data row
+
+
+# ---------------------------------------------------------------------------
+# format_tab
+# ---------------------------------------------------------------------------
+
+def test_format_tab_calls_batch_update():
+    sheets = MagicMock()
+    sheets.spreadsheets().batchUpdate().execute.return_value = {}
+    format_tab(sheets, "sheet-id", 42, [80, 150], [])
+    assert sheets.spreadsheets().batchUpdate.called
+
+
+def test_format_tab_includes_freeze_request():
+    sheets = MagicMock()
+    sheets.spreadsheets().batchUpdate().execute.return_value = {}
+    format_tab(sheets, "sheet-id", 42, [80], [])
+    body = sheets.spreadsheets().batchUpdate.call_args.kwargs["body"]
+    freeze_reqs = [r for r in body["requests"] if "updateSheetProperties" in r]
+    assert len(freeze_reqs) == 1
+    assert freeze_reqs[0]["updateSheetProperties"]["properties"]["gridProperties"]["frozenRowCount"] == 1
+
+
+def test_format_tab_includes_bold_header_request():
+    sheets = MagicMock()
+    sheets.spreadsheets().batchUpdate().execute.return_value = {}
+    format_tab(sheets, "sheet-id", 42, [80], [])
+    body = sheets.spreadsheets().batchUpdate.call_args.kwargs["body"]
+    bold_reqs = [
+        r for r in body["requests"]
+        if "repeatCell" in r and "textFormat" in r["repeatCell"]["cell"]["userEnteredFormat"]
+    ]
+    assert len(bold_reqs) == 1
+    assert bold_reqs[0]["repeatCell"]["cell"]["userEnteredFormat"]["textFormat"]["bold"] is True
+
+
+def test_format_tab_column_width_request_count():
+    sheets = MagicMock()
+    sheets.spreadsheets().batchUpdate().execute.return_value = {}
+    format_tab(sheets, "sheet-id", 42, [80, 150, 300], [])
+    body = sheets.spreadsheets().batchUpdate.call_args.kwargs["body"]
+    width_reqs = [r for r in body["requests"] if "updateDimensionProperties" in r]
+    assert len(width_reqs) == 3
+
+
+def test_format_tab_column_widths_are_correct():
+    sheets = MagicMock()
+    sheets.spreadsheets().batchUpdate().execute.return_value = {}
+    format_tab(sheets, "sheet-id", 42, [80, 400], [])
+    body = sheets.spreadsheets().batchUpdate.call_args.kwargs["body"]
+    width_reqs = [r for r in body["requests"] if "updateDimensionProperties" in r]
+    assert width_reqs[0]["updateDimensionProperties"]["properties"]["pixelSize"] == 80
+    assert width_reqs[1]["updateDimensionProperties"]["properties"]["pixelSize"] == 400
+
+
+def test_format_tab_wrap_request_count():
+    sheets = MagicMock()
+    sheets.spreadsheets().batchUpdate().execute.return_value = {}
+    format_tab(sheets, "sheet-id", 42, [], [2, 16])
+    body = sheets.spreadsheets().batchUpdate.call_args.kwargs["body"]
+    wrap_reqs = [r for r in body["requests"] if "repeatCell" in r and "wrapStrategy" in r["repeatCell"]["cell"]["userEnteredFormat"]]
+    assert len(wrap_reqs) == 2
+
+
+def test_format_tab_wrap_targets_correct_columns():
+    sheets = MagicMock()
+    sheets.spreadsheets().batchUpdate().execute.return_value = {}
+    format_tab(sheets, "sheet-id", 42, [], [5])
+    body = sheets.spreadsheets().batchUpdate.call_args.kwargs["body"]
+    wrap_reqs = [r for r in body["requests"] if "repeatCell" in r and "wrapStrategy" in r["repeatCell"]["cell"]["userEnteredFormat"]]
+    assert wrap_reqs[0]["repeatCell"]["range"]["startColumnIndex"] == 5
+    assert wrap_reqs[0]["repeatCell"]["range"]["endColumnIndex"] == 6
+
+
+def test_format_tab_uses_correct_sheet_id():
+    sheets = MagicMock()
+    sheets.spreadsheets().batchUpdate().execute.return_value = {}
+    format_tab(sheets, "sheet-id", 99, [80], [])
+    body = sheets.spreadsheets().batchUpdate.call_args.kwargs["body"]
+    freeze_req = next(r for r in body["requests"] if "updateSheetProperties" in r)
+    assert freeze_req["updateSheetProperties"]["properties"]["sheetId"] == 99
+
+
+def test_write_classified_notes_applies_formatting():
+    """write_classified_notes calls format_tab after writing data (two batchUpdate calls)."""
+    sheets = _make_sheets_mock()
+    write_classified_notes([], [], sheets, "sheet-123", "2026-02-10")
+    # Two batchUpdate calls: addSheet and format_tab.
+    assert sheets.spreadsheets().batchUpdate.call_count == 2
+    format_body = sheets.spreadsheets().batchUpdate.call_args_list[1].kwargs["body"]
+    freeze_reqs = [r for r in format_body["requests"] if "updateSheetProperties" in r]
+    assert len(freeze_reqs) == 1
+
+
+def test_column_widths_length_matches_columns():
+    assert len(_COLUMN_WIDTHS) == len(COLUMNS)
+
+
+def test_wrap_columns_are_valid_indices():
+    for idx in _WRAP_COLUMNS:
+        assert 0 <= idx < len(COLUMNS)
 
 
 # ---------------------------------------------------------------------------

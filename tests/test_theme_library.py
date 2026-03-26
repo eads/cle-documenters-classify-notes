@@ -12,6 +12,8 @@ import pytest
 from documenters_cle_langchain.theme_library import (
     COLUMNS,
     THEME_TAB_PREFIX,
+    _COLUMN_WIDTHS,
+    _WRAP_COLUMNS,
     QuestionType,
     ThemeRecord,
     Topic,
@@ -309,13 +311,17 @@ def test_read_theme_library_skips_malformed_rows(caplog):
 
 def _write_mock(existing_tab_titles: list[str] | None = None) -> MagicMock:
     """Build a minimal Sheets mock for write_theme_library tests."""
+    # Use .return_value chains rather than calling () to avoid recording setup calls
+    # in call_args_list, which would confuse index-based assertions.
     sheets = MagicMock()
     titles = existing_tab_titles or []
-    sheets.spreadsheets().get().execute.return_value = {
+    sheets.spreadsheets.return_value.get.return_value.execute.return_value = {
         "sheets": [{"properties": {"title": t}} for t in titles]
     }
-    sheets.spreadsheets().batchUpdate().execute.return_value = {}
-    sheets.spreadsheets().values().update().execute.return_value = {}
+    sheets.spreadsheets.return_value.batchUpdate.return_value.execute.return_value = {
+        "replies": [{"addSheet": {"properties": {"sheetId": 1}}}]
+    }
+    sheets.spreadsheets.return_value.values.return_value.update.return_value.execute.return_value = {}
     return sheets
 
 
@@ -349,3 +355,22 @@ def test_write_theme_library_empty_records():
     update_call = sheets.spreadsheets().values().update.call_args
     written_rows = update_call.kwargs["body"]["values"]
     assert written_rows == [COLUMNS]           # header only
+
+
+def test_write_theme_library_applies_formatting():
+    """write_theme_library calls format_tab after writing data (two batchUpdate calls)."""
+    sheets = _write_mock()
+    write_theme_library([], sheets, "sheet-id", "2026-03-24")
+    assert sheets.spreadsheets().batchUpdate.call_count == 2
+    format_body = sheets.spreadsheets().batchUpdate.call_args_list[1].kwargs["body"]
+    freeze_reqs = [r for r in format_body["requests"] if "updateSheetProperties" in r]
+    assert len(freeze_reqs) == 1
+
+
+def test_theme_overview_column_widths_length_matches_columns():
+    assert len(_COLUMN_WIDTHS) == len(COLUMNS)
+
+
+def test_theme_overview_wrap_columns_are_valid_indices():
+    for idx in _WRAP_COLUMNS:
+        assert 0 <= idx < len(COLUMNS)

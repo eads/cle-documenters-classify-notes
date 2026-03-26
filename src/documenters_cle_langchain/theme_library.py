@@ -85,6 +85,26 @@ COLUMNS = [
     "Representative passages",
 ]
 
+# Pixel widths for each COLUMNS entry (same order).
+_COLUMN_WIDTHS = [
+    150,  # Sub-topic
+    300,  # Description
+    150,  # Included in topics
+    80,   # Occurrences
+    80,   # Knowledge gap
+    80,   # Process confusion
+    80,   # Skepticism
+    80,   # Accountability
+    80,   # Continuity
+    400,  # Representative passages
+]
+
+# Columns that get text-wrap enabled.
+_WRAP_COLUMNS = [
+    COLUMNS.index("Description"),
+    COLUMNS.index("Representative passages"),
+]
+
 
 class ThemeRecord(BaseModel):
     """A confirmed sub-topic theme in the Theme Library.
@@ -298,10 +318,11 @@ def write_theme_library(
     existing_titles = [s["properties"]["title"] for s in metadata.get("sheets", [])]
     tab = next_theme_tab_name(run_date, existing_titles)
 
-    sheets.spreadsheets().batchUpdate(
+    add_response = sheets.spreadsheets().batchUpdate(
         spreadsheetId=sheet_id,
         body={"requests": [{"addSheet": {"properties": {"title": tab}}}]},
     ).execute()
+    tab_sheet_id = add_response["replies"][0]["addSheet"]["properties"]["sheetId"]
     log.info("theme library: created tab '%s'", tab)
 
     rows = [COLUMNS] + [r.to_row() for r in records]
@@ -311,5 +332,9 @@ def write_theme_library(
         valueInputOption="RAW",
         body={"values": rows},
     ).execute()
+
+    from .write_back import format_tab  # deferred — write_back imports theme_library at module level
+    format_tab(sheets, sheet_id, tab_sheet_id, _COLUMN_WIDTHS, _WRAP_COLUMNS)
+
     log.info("theme library: wrote %d records to '%s'", len(records), tab)
     return tab

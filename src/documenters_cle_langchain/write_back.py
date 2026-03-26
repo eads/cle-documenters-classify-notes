@@ -61,6 +61,33 @@ COLUMNS = [
     "Retrieved similar themes",
 ]
 
+# Pixel widths for each COLUMNS entry (same order).
+_COLUMN_WIDTHS = [
+    80,   # Meeting date
+    150,  # Meeting body
+    300,  # Source question
+    80,   # Topic
+    150,  # Sub-topic
+    200,  # Sub-topic description
+    80,   # Sub-topic confidence
+    150,  # Decision
+    150,  # Corrected sub-topic
+    150,  # Question type
+    120,  # Proposed new question type
+    150,  # Question type override
+    80,   # Question type confidence
+    120,  # Notes
+    80,   # Needs review
+    120,  # GDoc URL
+    400,  # Retrieved similar themes
+]
+
+# Columns that get text-wrap enabled (long free-text content).
+_WRAP_COLUMNS = [
+    COLUMNS.index("Source question"),
+    COLUMNS.index("Retrieved similar themes"),
+]
+
 
 def next_classified_notes_tab_name(run_date: str, existing_titles: list[str]) -> str:
     """Return the next versioned tab name for a given run date.
@@ -150,6 +177,88 @@ def build_classified_notes_rows(
 
 
 # ---------------------------------------------------------------------------
+# Sheet formatting
+# ---------------------------------------------------------------------------
+
+
+def format_tab(
+    sheets: Any,
+    sheet_id: str,
+    tab_sheet_id: int,
+    column_widths: list[int],
+    wrap_columns: list[int],
+) -> None:
+    """Apply formatting to a newly created tab in a single batchUpdate call.
+
+    Applies frozen header row, bold header row, per-column pixel widths, and
+    text-wrap on specified columns.  All formatting is batched into a single
+    API call to minimise latency.
+
+    Args:
+        sheets: Google Sheets API client.
+        sheet_id: spreadsheet ID.
+        tab_sheet_id: integer sheetId of the new tab (from addSheet response).
+        column_widths: pixel width for each column, in order.
+        wrap_columns: zero-based column indices that should wrap text.
+    """
+    requests: list[dict] = []
+
+    # Freeze the header row.
+    requests.append({
+        "updateSheetProperties": {
+            "properties": {
+                "sheetId": tab_sheet_id,
+                "gridProperties": {"frozenRowCount": 1},
+            },
+            "fields": "gridProperties.frozenRowCount",
+        }
+    })
+
+    # Bold the header row.
+    requests.append({
+        "repeatCell": {
+            "range": {"sheetId": tab_sheet_id, "startRowIndex": 0, "endRowIndex": 1},
+            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+            "fields": "userEnteredFormat.textFormat.bold",
+        }
+    })
+
+    # Set column widths.
+    for col_idx, width_px in enumerate(column_widths):
+        requests.append({
+            "updateDimensionProperties": {
+                "range": {
+                    "sheetId": tab_sheet_id,
+                    "dimension": "COLUMNS",
+                    "startIndex": col_idx,
+                    "endIndex": col_idx + 1,
+                },
+                "properties": {"pixelSize": width_px},
+                "fields": "pixelSize",
+            }
+        })
+
+    # Wrap text on long-content columns.
+    for col_idx in wrap_columns:
+        requests.append({
+            "repeatCell": {
+                "range": {
+                    "sheetId": tab_sheet_id,
+                    "startColumnIndex": col_idx,
+                    "endColumnIndex": col_idx + 1,
+                },
+                "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP"}},
+                "fields": "userEnteredFormat.wrapStrategy",
+            }
+        })
+
+    sheets.spreadsheets().batchUpdate(
+        spreadsheetId=sheet_id,
+        body={"requests": requests},
+    ).execute()
+
+
+# ---------------------------------------------------------------------------
 # Library description enrichment
 # ---------------------------------------------------------------------------
 
@@ -213,10 +322,11 @@ def write_classified_notes(
     existing_titles = [s["properties"]["title"] for s in metadata.get("sheets", [])]
     tab = next_classified_notes_tab_name(run_date, existing_titles)
 
-    sheets.spreadsheets().batchUpdate(
+    add_response = sheets.spreadsheets().batchUpdate(
         spreadsheetId=sheet_id,
         body={"requests": [{"addSheet": {"properties": {"title": tab}}}]},
     ).execute()
+    tab_sheet_id = add_response["replies"][0]["addSheet"]["properties"]["sheetId"]
     log.info("write_back: created tab '%s'", tab)
 
     rows = build_classified_notes_rows(classified_themes, ingested_docs)
@@ -226,6 +336,8 @@ def write_classified_notes(
         valueInputOption="RAW",
         body={"values": rows},
     ).execute()
+
+    format_tab(sheets, sheet_id, tab_sheet_id, _COLUMN_WIDTHS, _WRAP_COLUMNS)
 
     data_rows = len(rows) - 1
     log.info(
