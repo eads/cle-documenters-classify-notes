@@ -4,6 +4,36 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #44 — Support multiple sub-topics (and output rows) per question
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-44-multiple-subtopics`
+
+**What was built:**
+
+Changed `extract_candidates.py` from a one-to-one (question → candidate) model to one-to-many (question → 1+ candidates).
+
+- New internal schema: `_SingleTheme(sub_topic, description)` and `_ExtractedTheme(themes: list[_SingleTheme])`. One LLM call per question; the model returns a list of sub-topic/description pairs.
+- `run_extract_candidates` now flattens: each `_SingleTheme` in the response produces one `ThemeCandidate`. Shared fields (`doc_id`, `source_question`, `retrieved_context`) are stamped on all candidates from the same question.
+- Prompts updated: "propose one or more sub-topic labels" with an explicit note that most questions map to exactly one — only split when the question genuinely addresses distinct civic issues.
+
+Tests: replaced the one-to-one hard-case test with three new tests proving that a two-theme response from a single LLM call produces two candidates sharing `source_question`, `doc_id`, and `retrieved_context`. `test_at_least_one_candidate_per_question` (≥ N) replaces the old exact-count test. 31 tests in the file; 294 total pass.
+
+**Key decisions:**
+
+- **One LLM call per question, not one call per candidate.** Splitting into multiple calls would be wasteful and inconsistent — the model has all the context it needs for a single question in one prompt. The list structure in the response schema handles the multi-topic case naturally.
+
+- **Prompts discourage over-splitting.** "Most questions have exactly one sub-topic" is stated explicitly in both the system and user messages. Without this guardrail, the model might split anything remotely compound.
+
+- **No downstream changes needed.** `classify_themes` consumes a `list[ThemeCandidate]` with no assumption about how many candidates came from the same question. The write-back step writes one row per `ClassifiedTheme`, so multi-topic questions already produce multiple rows naturally.
+
+**Deferred:**
+
+- Sub-topic prompt specificity: user noted prompts are "way too specific" but wants to see RAG results from a real run before adjusting. No prompt changes made beyond the one-to-many framing.
+
+---
+
 ## Issue #23 — text_extract.py: preserve hyperlink URLs from Google Docs
 
 **Date:** 2026-03-26
