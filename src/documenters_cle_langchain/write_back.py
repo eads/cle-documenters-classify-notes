@@ -3,17 +3,22 @@
 Writes one new tab per run to the Google Sheet. Tab name: ``classified-notes-YYYY-MM-DD``.
 One row per processed follow-up question.
 
-Column schema:
+Column schema (left to right as written to the sheet):
   Agent-filled (read-only for reporters):
-    Meeting date, Meeting body, Doc URL, Source question, Sub-topic, Topic,
-    Retrieved similar themes, Confidence, Needs review,
-    Question type, Question type: low confidence
+    Meeting date, Meeting body, Source question, Topic, Sub-topic,
+    Sub-topic confidence, Question type, Question type confidence
   Reporter decision columns (blank on write):
-    Decision, Corrected sub-topic, Question type override,
-    Proposed new question type, Notes
+    Decision, Corrected sub-topic, Proposed new question type,
+    Question type override, Notes
+  Triage / reference (end of row):
+    Needs review, GDoc URL, Retrieved similar themes
 
 ``Needs review`` is "yes" for rows with merge_confidence below the review
-threshold. Reporters filter on this column to triage flagged classifications.
+threshold. Reporters filter on this column to triage flagged rows.
+
+``Sub-topic confidence`` and ``Question type confidence`` are floats (0.0–1.0,
+rounded to 2 decimal places). Numeric scores let reporters sort and filter by
+degree of certainty rather than relying on a boolean flag.
 
 ``Retrieved similar themes`` is formatted as human-readable numbered lines
 (not raw JSON) — this is the column that gives reporters enough context to
@@ -36,21 +41,22 @@ COLUMNS = [
     # --- agent-filled ---
     "Meeting date",
     "Meeting body",
-    "Doc URL",
     "Source question",
-    "Sub-topic",
     "Topic",
-    "Retrieved similar themes",
-    "Confidence",
-    "Needs review",
-    "Question type",
-    "Question type: low confidence",
+    "Sub-topic",
+    "Sub-topic confidence",
     # --- reporter decision columns (blank on write) ---
     "Decision",
     "Corrected sub-topic",
-    "Question type override",
+    "Question type",
     "Proposed new question type",
+    "Question type override",
+    "Question type confidence",
     "Notes",
+    # --- triage / reference ---
+    "Needs review",
+    "GDoc URL",
+    "Retrieved similar themes",
 ]
 
 
@@ -112,35 +118,29 @@ def build_classified_notes_rows(
         doc = doc_lookup.get(theme.doc_id)
         meeting_date = ""
         meeting_body = ""
-        doc_url = ""
+        gdoc_url = ""
         if doc:
             meeting_date = doc["date"] or doc["date_raw"] or ""
             meeting_body = doc["agency"] or ""
-            doc_url = doc["web_url"] or ""
-
-        qt_low_confidence = (
-            "yes"
-            if (theme.question_type_low_confidence or theme.proposed_new_question_type)
-            else ""
-        )
+            gdoc_url = doc["web_url"] or ""
 
         rows.append([
-            meeting_date,
-            meeting_body,
-            doc_url,
-            theme.source_question,
-            theme.sub_topic,
-            theme.topic,
-            _format_retrieved_context(theme.retrieved_context),
-            round(theme.merge_confidence, 2),
-            "yes" if theme.needs_review else "",
-            theme.question_type or "",
-            qt_low_confidence,
-            "",  # Decision
-            "",  # Corrected sub-topic
-            "",  # Question type override
-            "",  # Proposed new question type
-            "",  # Notes
+            meeting_date,                                   # Meeting date
+            meeting_body,                                   # Meeting body
+            theme.source_question,                          # Source question
+            theme.topic,                                    # Topic
+            theme.sub_topic,                                # Sub-topic
+            round(theme.merge_confidence, 2),               # Sub-topic confidence
+            "",                                             # Decision
+            "",                                             # Corrected sub-topic
+            theme.question_type or "",                      # Question type
+            "",                                             # Proposed new question type
+            "",                                             # Question type override
+            round(theme.question_type_confidence, 2),       # Question type confidence
+            "",                                             # Notes
+            "yes" if theme.needs_review else "",            # Needs review
+            gdoc_url,                                       # GDoc URL
+            _format_retrieved_context(theme.retrieved_context),  # Retrieved similar themes
         ])
 
     return rows

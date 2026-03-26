@@ -123,20 +123,20 @@ def test_column_headers_match_spec():
     assert COLUMNS == [
         "Meeting date",
         "Meeting body",
-        "Doc URL",
         "Source question",
-        "Sub-topic",
         "Topic",
-        "Retrieved similar themes",
-        "Confidence",
-        "Needs review",
-        "Question type",
-        "Question type: low confidence",
+        "Sub-topic",
+        "Sub-topic confidence",
         "Decision",
         "Corrected sub-topic",
-        "Question type override",
+        "Question type",
         "Proposed new question type",
+        "Question type override",
+        "Question type confidence",
         "Notes",
+        "Needs review",
+        "GDoc URL",
+        "Retrieved similar themes",
     ]
 
 
@@ -204,10 +204,10 @@ def test_data_row_meeting_body_from_ingested_doc():
     assert row[COLUMNS.index("Meeting body")] == "Cleveland City Council"
 
 
-def test_data_row_doc_url_from_ingested_doc():
+def test_data_row_gdoc_url_from_ingested_doc():
     rows = build_classified_notes_rows([make_classified_theme()], [make_ingested_doc()])
     row = rows[1]
-    assert row[COLUMNS.index("Doc URL")] == "https://example.com/doc-001"
+    assert row[COLUMNS.index("GDoc URL")] == "https://example.com/doc-001"
 
 
 def test_data_row_source_question():
@@ -237,9 +237,9 @@ def test_data_row_retrieved_themes_human_readable():
     assert "HOUSING" in cell
 
 
-def test_data_row_confidence_numeric():
+def test_data_row_sub_topic_confidence_numeric():
     rows = build_classified_notes_rows([make_classified_theme(merge_confidence=0.823)], [make_ingested_doc()])
-    assert rows[1][COLUMNS.index("Confidence")] == 0.82
+    assert rows[1][COLUMNS.index("Sub-topic confidence")] == 0.82
 
 
 def test_needs_review_false_row_has_empty_flag():
@@ -265,28 +265,16 @@ def test_question_type_none_becomes_empty_string():
     assert rows[1][COLUMNS.index("Question type")] == ""
 
 
-def test_qt_low_confidence_flag_set_when_low_confidence():
-    theme = make_classified_theme(question_type_low_confidence=True)
+def test_qt_confidence_is_numeric():
+    theme = make_classified_theme(question_type_confidence=0.77)
     rows = build_classified_notes_rows([theme], [make_ingested_doc()])
-    assert rows[1][COLUMNS.index("Question type: low confidence")] == "yes"
+    assert rows[1][COLUMNS.index("Question type confidence")] == 0.77
 
 
-def test_qt_low_confidence_flag_set_when_proposed_new_type():
-    theme = make_classified_theme(
-        question_type_low_confidence=False,
-        proposed_new_question_type="historical grievance",
-    )
+def test_qt_confidence_rounds_to_two_decimal_places():
+    theme = make_classified_theme(question_type_confidence=0.876)
     rows = build_classified_notes_rows([theme], [make_ingested_doc()])
-    assert rows[1][COLUMNS.index("Question type: low confidence")] == "yes"
-
-
-def test_qt_low_confidence_flag_empty_when_confident():
-    theme = make_classified_theme(
-        question_type_low_confidence=False,
-        proposed_new_question_type=None,
-    )
-    rows = build_classified_notes_rows([theme], [make_ingested_doc()])
-    assert rows[1][COLUMNS.index("Question type: low confidence")] == ""
+    assert rows[1][COLUMNS.index("Question type confidence")] == 0.88
 
 
 def test_reporter_decision_columns_are_blank():
@@ -304,7 +292,7 @@ def test_missing_doc_id_leaves_meeting_fields_blank():
     row = rows[1]
     assert row[COLUMNS.index("Meeting date")] == ""
     assert row[COLUMNS.index("Meeting body")] == ""
-    assert row[COLUMNS.index("Doc URL")] == ""
+    assert row[COLUMNS.index("GDoc URL")] == ""
 
 
 def test_date_raw_fallback_when_date_is_none():
