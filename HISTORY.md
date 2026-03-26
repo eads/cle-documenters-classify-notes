@@ -27,6 +27,7 @@ Prompt changes only in `extract_candidates.py`. No logic changes.
 
 - Cross-cutting vs. domain-specific: the updated issue clarified that abstract concerns ("transparency", "accountability") should share a single cross-domain label. The earlier draft I wrote had this backwards (instructing the model to add domain qualifiers). Corrected before commit.
 - RAG exception for specific instances: the owner's comment asked that we preserve named labels for specific bills/funds/initiatives when they were previously named by a human reviewer. The guidance threads this: default to the abstract underlying issue, but defer to a retrieved label when one exists.
+- Compound labels (e.g. "prisons, motherhood and pregnancy"): added explicit guidance prohibiting comma-separated compound labels. The model already supports returning multiple `_SingleTheme` entries per question (from Issue #44); it just needed to be told to use that path rather than packing multiple issues into one label. Added a hard-case test using the prisons/maternal example showing the correct output is two separate candidates with no commas in either label.
 
 ---
 

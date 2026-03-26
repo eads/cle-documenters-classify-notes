@@ -181,6 +181,42 @@ def test_prompt_user_emphasizes_recurrence():
     assert "recur" in content.lower()
 
 
+def test_prompt_system_no_compound_labels():
+    """System prompt must prohibit comma-separated compound labels and show correct split."""
+    content = build_extraction_prompt("What about prisons?", [])[0]["content"]
+    # The compound-label example and the instruction to return separate entries
+    assert "compound" in content.lower() or "one issue per label" in content.lower() or "separate sub-topic" in content.lower()
+
+
+def test_hard_case_compound_label_splits_into_two_entries():
+    """A question spanning two unrelated issues (prisons + maternal care) should produce
+    two separate ThemeCandidates, not one candidate with a comma-separated label."""
+    response = _ExtractedTheme(themes=[
+        _SingleTheme(
+            sub_topic="prenatal care in county jails",
+            description="Access to healthcare for pregnant people who are incarcerated.",
+        ),
+        _SingleTheme(
+            sub_topic="maternal reentry support",
+            description="Support services for mothers returning from incarceration.",
+        ),
+    ])
+    ctx = make_context(
+        "doc1",
+        "What resources exist for pregnant women who are incarcerated, "
+        "and what happens to them and their children after release?",
+    )
+    llm = FakeLLM(response)
+    candidates = run_extract_candidates([ctx], llm)
+    assert len(candidates) == 2
+    labels = {c.sub_topic for c in candidates}
+    assert "prenatal care in county jails" in labels
+    assert "maternal reentry support" in labels
+    # No compound label with a comma
+    for c in candidates:
+        assert "," not in c.sub_topic
+
+
 # ---------------------------------------------------------------------------
 # build_extraction_prompt — question and context content
 # ---------------------------------------------------------------------------
