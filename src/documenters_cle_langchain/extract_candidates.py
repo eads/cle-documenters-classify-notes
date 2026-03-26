@@ -1,12 +1,11 @@
 """extract_candidates.py — LLM-based theme candidate extraction.
 
-For each follow-up question, produces a ThemeCandidate: proposed sub-topic
-label, description, source question verbatim, and the retrieval context that
-was provided to the model.
+For each follow-up question, produces one or more ThemeCandidates: proposed
+sub-topic label(s), description(s), source question verbatim, and the retrieval
+context that was provided to the model.
 
-One question → one candidate. This is a deliberate starting constraint.
-Genuinely multi-theme questions exist in practice; revisit with LangSmith
-evidence after the first real run before relaxing the one-to-one rule.
+Most questions map to exactly one sub-topic. The LLM may return multiple only
+when a question genuinely and distinctly addresses separate civic issues.
 
 Called by the `extract_candidates` node in graph.py.
 """
@@ -41,11 +40,15 @@ class ThemeCandidate(BaseModel):
     retrieved_context: list[dict]  # SimilarTheme dicts shown to the model as context
 
 
-# Internal LLM output schema — only the two fields the model generates.
+# Internal LLM output schema — one or more sub-topic/description pairs.
 # We add doc_id, source_question, and retrieved_context from the input data.
-class _ExtractedTheme(BaseModel):
+class _SingleTheme(BaseModel):
     sub_topic: str
     description: str
+
+
+class _ExtractedTheme(BaseModel):
+    themes: list[_SingleTheme]
 
 
 # ---------------------------------------------------------------------------
@@ -63,10 +66,12 @@ to track over time across multiple meetings. Examples:
   - "Lead pipe replacement funding" (not "infrastructure")
   - "Police union contract negotiations" (not "public safety")
 
-Your job: given a follow-up question from a community reporter, propose a \
-single sub-topic label and a 1-2 sentence description of the underlying civic \
-concern. The label should be specific, lowercase, and suitable as a canonical \
-theme name that could recur across meetings."""
+Your job: given a follow-up question from a community reporter, propose one or \
+more sub-topic labels and 1-2 sentence descriptions of the underlying civic \
+concerns. Most questions map to exactly one sub-topic — only propose multiple \
+if the question genuinely and distinctly addresses separate civic issues. \
+Labels should be specific, lowercase, and suitable as canonical theme names \
+that could recur across meetings."""
 
 USER_PROMPT = """\
 Follow-up question from reporter:
@@ -74,9 +79,10 @@ Follow-up question from reporter:
 
 {context_section}
 
-Propose a single sub-topic label and a 1-2 sentence description for the civic \
-concern expressed in this question. If the question touches multiple issues, \
-choose the most specific and actionable one."""
+Propose sub-topic label(s) and description(s) for the civic concern(s) \
+expressed in this question. Most questions have exactly one sub-topic. \
+Only propose multiple if the question clearly addresses distinct civic issues \
+that would be tracked separately."""
 
 
 def _format_similar_themes(similar_themes: list[SimilarTheme]) -> str:
@@ -131,12 +137,12 @@ def run_extract_candidates(
     retrieval_context: list[QuestionContext],
     llm: Any,  # ChatOpenAI.with_structured_output(_ExtractedTheme), or a test fake
 ) -> list[ThemeCandidate]:
-    """Extract one ThemeCandidate per follow-up question.
+    """Extract one or more ThemeCandidates per follow-up question.
 
-    One-to-one: each QuestionContext produces exactly one ThemeCandidate.
-    The LLM receives the question text and retrieved similar themes; it returns
-    a sub-topic label and description. Metadata (doc_id, source_question,
-    retrieved_context) is attached by this function, not by the LLM.
+    One LLM call per question. The LLM returns a list of sub-topic/description
+    pairs (usually one, occasionally more for genuinely multi-issue questions).
+    Each pair produces one ThemeCandidate with the same source question and
+    retrieved context.
 
     Args:
         retrieval_context: one QuestionContext per question (from retrieve_context node).
@@ -145,26 +151,27 @@ def run_extract_candidates(
              interface.
 
     Returns:
-        One ThemeCandidate per entry in retrieval_context, in the same order.
+        One or more ThemeCandidates per entry in retrieval_context.
     """
     candidates: list[ThemeCandidate] = []
 
     for ctx in retrieval_context:
         messages = build_extraction_prompt(ctx["question"], ctx["similar_themes"])
         extracted: _ExtractedTheme = llm.invoke(messages)
-        candidate = ThemeCandidate(
-            doc_id=ctx["doc_id"],
-            source_question=ctx["question"],
-            sub_topic=extracted.sub_topic,
-            description=extracted.description,
-            retrieved_context=list(ctx["similar_themes"]),
-        )
-        candidates.append(candidate)
-        log.info(
-            "extract_candidates: '%s…' → sub_topic='%s'",
-            ctx["question"][:60],
-            extracted.sub_topic,
-        )
+        for theme in extracted.themes:
+            candidate = ThemeCandidate(
+                doc_id=ctx["doc_id"],
+                source_question=ctx["question"],
+                sub_topic=theme.sub_topic,
+                description=theme.description,
+                retrieved_context=list(ctx["similar_themes"]),
+            )
+            candidates.append(candidate)
+            log.info(
+                "extract_candidates: '%s…' → sub_topic='%s'",
+                ctx["question"][:60],
+                theme.sub_topic,
+            )
 
     log.info(
         "extract_candidates: %d questions → %d candidates",

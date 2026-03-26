@@ -10,6 +10,7 @@ import pytest
 from documenters_cle_langchain.extract_candidates import (
     ThemeCandidate,
     _ExtractedTheme,
+    _SingleTheme,
     _format_similar_themes,
     build_extraction_prompt,
     run_extract_candidates,
@@ -72,10 +73,12 @@ EDUCATION_THEME = make_similar_theme(
     "EDUCATION",
 )
 
-DEFAULT_RESPONSE = _ExtractedTheme(
-    sub_topic="Section 8 voucher waitlists",
-    description="Community members face long waits for housing vouchers.",
-)
+DEFAULT_RESPONSE = _ExtractedTheme(themes=[
+    _SingleTheme(
+        sub_topic="Section 8 voucher waitlists",
+        description="Community members face long waits for housing vouchers.",
+    )
+])
 
 # ---------------------------------------------------------------------------
 # _format_similar_themes
@@ -189,11 +192,11 @@ def test_empty_retrieval_context_returns_empty_candidates():
 
 
 # ---------------------------------------------------------------------------
-# run_extract_candidates — one-to-one contract
+# run_extract_candidates — one LLM call per question
 # ---------------------------------------------------------------------------
 
 
-def test_one_candidate_per_question():
+def test_at_least_one_candidate_per_question():
     contexts = [
         make_context("doc1", "Question one?"),
         make_context("doc1", "Question two?"),
@@ -201,7 +204,7 @@ def test_one_candidate_per_question():
     ]
     llm = FakeLLM(DEFAULT_RESPONSE)
     candidates = run_extract_candidates(contexts, llm)
-    assert len(candidates) == 3
+    assert len(candidates) >= 3
 
 
 def test_llm_called_once_per_question():
@@ -216,8 +219,8 @@ def test_llm_called_once_per_question():
 
 def test_candidate_order_matches_context_order():
     responses = [
-        _ExtractedTheme(sub_topic="first theme", description="first"),
-        _ExtractedTheme(sub_topic="second theme", description="second"),
+        _ExtractedTheme(themes=[_SingleTheme(sub_topic="first theme", description="first")]),
+        _ExtractedTheme(themes=[_SingleTheme(sub_topic="second theme", description="second")]),
     ]
 
     class SequentialFakeLLM:
@@ -257,14 +260,14 @@ def test_candidate_source_question_preserved():
 
 
 def test_candidate_sub_topic_from_llm():
-    response = _ExtractedTheme(sub_topic="lead pipe replacement", description="desc")
+    response = _ExtractedTheme(themes=[_SingleTheme(sub_topic="lead pipe replacement", description="desc")])
     ctx = make_context("doc1", "Question?")
     candidates = run_extract_candidates([ctx], FakeLLM(response))
     assert candidates[0].sub_topic == "lead pipe replacement"
 
 
 def test_candidate_description_from_llm():
-    response = _ExtractedTheme(sub_topic="label", description="Custom description text.")
+    response = _ExtractedTheme(themes=[_SingleTheme(sub_topic="label", description="Custom description text.")])
     ctx = make_context("doc1", "Question?")
     candidates = run_extract_candidates([ctx], FakeLLM(response))
     assert candidates[0].description == "Custom description text."
@@ -299,26 +302,56 @@ AMBIGUOUS_QUESTION = (
 )
 
 
-def test_hard_case_ambiguous_question_produces_single_candidate():
-    """A question spanning housing and education must produce exactly one candidate.
+def test_hard_case_ambiguous_question_can_produce_multiple_candidates():
+    """A question spanning housing and education may produce two candidates.
 
-    The one-to-one contract must hold regardless of question complexity.
-    The model is expected to pick the most specific and actionable sub-topic.
+    The multi-subtopic path must work end-to-end: one LLM call, two candidates
+    with the same source question and retrieved_context.
     """
-    response = _ExtractedTheme(
-        sub_topic="housing voucher impact on school access",
-        description=(
-            "Shortage of housing vouchers constrains where families can live, "
-            "limiting their children's school options."
+    response = _ExtractedTheme(themes=[
+        _SingleTheme(
+            sub_topic="Section 8 voucher availability",
+            description="Shortage of housing vouchers constrains where families can live.",
         ),
-    )
+        _SingleTheme(
+            sub_topic="school access limited by housing instability",
+            description="Families' school choices are restricted by where they can afford to live.",
+        ),
+    ])
     ctx = make_context(
         "doc1",
         AMBIGUOUS_QUESTION,
         similar_themes=[HOUSING_THEME, EDUCATION_THEME],
     )
+    llm = FakeLLM(response)
+    candidates = run_extract_candidates([ctx], llm)
+    assert len(candidates) == 2
+    assert llm.calls  # LLM was called exactly once
+    assert len(llm.calls) == 1
+
+
+def test_hard_case_multi_candidate_shares_source_question():
+    """Both candidates from a multi-topic question carry the verbatim question."""
+    response = _ExtractedTheme(themes=[
+        _SingleTheme(sub_topic="housing", description="desc1"),
+        _SingleTheme(sub_topic="education", description="desc2"),
+    ])
+    ctx = make_context("doc1", AMBIGUOUS_QUESTION)
     candidates = run_extract_candidates([ctx], FakeLLM(response))
-    assert len(candidates) == 1
+    for c in candidates:
+        assert c.source_question == AMBIGUOUS_QUESTION
+
+
+def test_hard_case_multi_candidate_shares_doc_id():
+    """Both candidates from a multi-topic question carry the same doc_id."""
+    response = _ExtractedTheme(themes=[
+        _SingleTheme(sub_topic="housing", description="desc1"),
+        _SingleTheme(sub_topic="education", description="desc2"),
+    ])
+    ctx = make_context("doc-xyz", AMBIGUOUS_QUESTION)
+    candidates = run_extract_candidates([ctx], FakeLLM(response))
+    for c in candidates:
+        assert c.doc_id == "doc-xyz"
 
 
 def test_hard_case_source_question_preserved_verbatim():
