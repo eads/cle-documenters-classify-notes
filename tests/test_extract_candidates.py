@@ -146,6 +146,41 @@ def test_prompt_system_includes_examples():
     )
 
 
+def test_prompt_system_has_counter_examples():
+    """System prompt must include at least two over-specific → right-level counter-example pairs."""
+    content = build_extraction_prompt("What about hiring?", [])[0]["content"]
+    # Two bad→good pairs from the issue
+    assert "municipal staffing and hiring" in content
+    assert "vacant land redevelopment" in content
+
+
+def test_prompt_system_prefers_retrieved_labels():
+    """System prompt must instruct the model to prefer retrieved theme labels."""
+    content = build_extraction_prompt("What about housing?", [])[0]["content"]
+    assert "prefer" in content.lower() and "retrieved" in content.lower()
+
+
+def test_prompt_system_cross_cutting_no_domain_qualifier():
+    """System prompt must say cross-cutting themes should NOT carry a domain qualifier."""
+    content = build_extraction_prompt("What about transparency?", [])[0]["content"]
+    # The prompt should mention the cross-cutting concept and the correct guidance
+    assert "cross-cutting" in content.lower() or "transparency" in content.lower()
+    # Must not tell the model to add domain qualifiers
+    assert "carry the domain" not in content.lower()
+
+
+def test_prompt_user_not_most_specific_and_actionable():
+    """User prompt must not use the phrase 'most specific and actionable'."""
+    content = build_extraction_prompt("What about housing?", [])[1]["content"]
+    assert "most specific and actionable" not in content.lower()
+
+
+def test_prompt_user_emphasizes_recurrence():
+    """User prompt must frame labels in terms of recurrence, not question summarization."""
+    content = build_extraction_prompt("What about housing?", [])[1]["content"]
+    assert "recur" in content.lower()
+
+
 # ---------------------------------------------------------------------------
 # build_extraction_prompt — question and context content
 # ---------------------------------------------------------------------------

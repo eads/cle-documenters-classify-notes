@@ -35,7 +35,7 @@ class ThemeCandidate(BaseModel):
 
     doc_id: str
     source_question: str        # verbatim follow-up question
-    sub_topic: str              # proposed label — specific and lowercase
+    sub_topic: str              # proposed label — lowercase, recurring civic issue
     description: str            # 1-2 sentence description of the civic concern
     retrieved_context: list[dict]  # SimilarTheme dicts shown to the model as context
 
@@ -59,19 +59,40 @@ SYSTEM_PROMPT = """\
 You are a civic journalism analyst helping to build a library of recurring \
 themes in Cleveland public meeting notes.
 
-A **sub-topic** is a specific, concrete civic issue or concern — narrow enough \
-to track over time across multiple meetings. Examples:
+A **sub-topic** is a recurring civic issue or concern — specific enough to \
+track over time, but abstract enough to recur across multiple Cleveland \
+meetings over the course of a year. Examples:
   - "Section 8 voucher waitlists" (not "housing")
   - "Magnet school enrollment caps" (not "education")
   - "Lead pipe replacement funding" (not "infrastructure")
   - "Police union contract negotiations" (not "public safety")
 
+**Right level of abstraction.** Name the underlying civic issue, not the \
+specific question or event:
+  - Bad: "municipal hiring freeze timeline" (one event) → Good: "municipal staffing and hiring"
+  - Bad: "site readiness fund eligibility for vacant industrial properties" → Good: "vacant land redevelopment"
+  - Bad: "state authorization for local rent control" → Good: "rent control"
+  - Bad: "grant reconciliation reporting transparency" → Good: "budget reporting transparency"
+
+If the question is about a specific bill, fund, or timeline, name the \
+underlying civic issue — unless a retrieved theme already tracks that specific \
+instance (because a human previously decided it was worth tracking by name).
+
+**Cross-cutting themes.** Some concerns like "transparency" and \
+"accountability" span domains — do not add a domain qualifier. A \
+transparency concern at a housing meeting and one at a schools meeting \
+should both be labeled "transparency", not "housing transparency" and \
+"schools transparency".
+
+**Prefer retrieved labels.** If a retrieved theme closely matches the \
+underlying issue, use that label. Only create a new label when the question \
+is genuinely distinct from all retrieved themes.
+
 Your job: given a follow-up question from a community reporter, propose one or \
 more sub-topic labels and 1-2 sentence descriptions of the underlying civic \
 concerns. Most questions map to exactly one sub-topic — only propose multiple \
 if the question genuinely and distinctly addresses separate civic issues. \
-Labels should be specific, lowercase, and suitable as canonical theme names \
-that could recur across meetings."""
+Labels should be lowercase and suitable as canonical theme names."""
 
 USER_PROMPT = """\
 Follow-up question from reporter:
@@ -80,9 +101,12 @@ Follow-up question from reporter:
 {context_section}
 
 Propose sub-topic label(s) and description(s) for the civic concern(s) \
-expressed in this question. Most questions have exactly one sub-topic. \
-Only propose multiple if the question clearly addresses distinct civic issues \
-that would be tracked separately."""
+expressed in this question. Choose a label that names the underlying civic \
+issue — something likely to recur across multiple Cleveland meetings, not a \
+summary of this specific question. If a retrieved theme closely matches, \
+prefer that label. Most questions have exactly one sub-topic. Only propose \
+multiple if the question clearly addresses distinct civic issues that would \
+be tracked separately."""
 
 
 def _format_similar_themes(similar_themes: list[SimilarTheme]) -> str:
