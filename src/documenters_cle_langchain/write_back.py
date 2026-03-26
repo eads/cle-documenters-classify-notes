@@ -54,9 +54,18 @@ COLUMNS = [
 ]
 
 
-def classified_notes_tab_name(run_date: str) -> str:
-    """Return the tab name for a given run date."""
-    return f"{CLASSIFIED_NOTES_TAB_PREFIX}{run_date}"
+def next_classified_notes_tab_name(run_date: str, existing_titles: list[str]) -> str:
+    """Return the next versioned tab name for a given run date.
+
+    Format: ``classified-notes-YYYY-MM-DD-NNN``.
+
+    Counts existing tabs that match the ``classified-notes-{run_date}-``
+    prefix and increments. First run of the day → 001, second → 002, etc.
+    Tabs from other dates or with other prefixes are ignored.
+    """
+    prefix = f"{CLASSIFIED_NOTES_TAB_PREFIX}{run_date}-"
+    n = sum(1 for t in existing_titles if t.startswith(prefix)) + 1
+    return f"{prefix}{n:03d}"
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +174,9 @@ def write_classified_notes(
     Returns:
         The tab name that was created.
     """
-    tab = classified_notes_tab_name(run_date)
+    metadata = sheets.spreadsheets().get(spreadsheetId=sheet_id).execute()
+    existing_titles = [s["properties"]["title"] for s in metadata.get("sheets", [])]
+    tab = next_classified_notes_tab_name(run_date, existing_titles)
 
     sheets.spreadsheets().batchUpdate(
         spreadsheetId=sheet_id,

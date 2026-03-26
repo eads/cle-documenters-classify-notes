@@ -16,8 +16,8 @@ from documenters_cle_langchain.theme_library import (
     ThemeRecord,
     Topic,
     find_latest_theme_tab,
+    next_theme_tab_name,
     read_theme_library,
-    theme_tab_name,
     write_theme_library,
 )
 
@@ -180,18 +180,37 @@ def test_from_row_tolerates_missing_column():
 # Tab utilities
 # ---------------------------------------------------------------------------
 
-def test_theme_tab_name():
-    assert theme_tab_name("2026-03-24") == "theme-overview-2026-03-24"
+def test_theme_tab_name_first_run():
+    assert next_theme_tab_name("2026-03-24", []) == "theme-overview-2026-03-24-001"
+
+
+def test_theme_tab_name_second_run():
+    existing = ["theme-overview-2026-03-24-001"]
+    assert next_theme_tab_name("2026-03-24", existing) == "theme-overview-2026-03-24-002"
+
+
+def test_theme_tab_name_ignores_other_dates():
+    existing = ["theme-overview-2026-03-23-001", "theme-overview-2026-03-23-002"]
+    assert next_theme_tab_name("2026-03-24", existing) == "theme-overview-2026-03-24-001"
 
 
 def test_find_latest_tab_returns_most_recent():
     tabs = [
-        "theme-overview-2026-01-15",
+        "theme-overview-2026-01-15-001",
         "Sheet1",
-        "theme-overview-2026-03-01",
-        "theme-overview-2025-12-10",
+        "theme-overview-2026-03-01-001",
+        "theme-overview-2025-12-10-001",
     ]
-    assert find_latest_theme_tab(tabs) == "theme-overview-2026-03-01"
+    assert find_latest_theme_tab(tabs) == "theme-overview-2026-03-01-001"
+
+
+def test_find_latest_tab_returns_latest_within_same_day():
+    tabs = [
+        "theme-overview-2026-03-01-001",
+        "theme-overview-2026-03-01-002",
+        "theme-overview-2026-03-01-003",
+    ]
+    assert find_latest_theme_tab(tabs) == "theme-overview-2026-03-01-003"
 
 
 def test_find_latest_tab_cold_start():
@@ -278,16 +297,33 @@ def test_read_theme_library_skips_malformed_rows(caplog):
 # Sheets API: write_theme_library (mocked)
 # ---------------------------------------------------------------------------
 
-def test_write_theme_library_creates_tab():
+def _write_mock(existing_tab_titles: list[str] | None = None) -> MagicMock:
+    """Build a minimal Sheets mock for write_theme_library tests."""
     sheets = MagicMock()
+    titles = existing_tab_titles or []
+    sheets.spreadsheets().get().execute.return_value = {
+        "sheets": [{"properties": {"title": t}} for t in titles]
+    }
+    sheets.spreadsheets().batchUpdate().execute.return_value = {}
+    sheets.spreadsheets().values().update().execute.return_value = {}
+    return sheets
+
+
+def test_write_theme_library_creates_tab():
+    sheets = _write_mock()
     records = [_housing_record()]
     tab = write_theme_library(records, sheets, "sheet-id", "2026-03-24")
-    assert tab == "theme-overview-2026-03-24"
-    sheets.spreadsheets().batchUpdate.assert_called_once()
+    assert tab == "theme-overview-2026-03-24-001"
+
+
+def test_write_theme_library_increments_on_same_day_rerun():
+    sheets = _write_mock(existing_tab_titles=["theme-overview-2026-03-24-001"])
+    tab = write_theme_library([], sheets, "sheet-id", "2026-03-24")
+    assert tab == "theme-overview-2026-03-24-002"
 
 
 def test_write_theme_library_writes_header_and_data():
-    sheets = MagicMock()
+    sheets = _write_mock()
     records = [_housing_record(occurrence_count=2)]
     write_theme_library(records, sheets, "sheet-id", "2026-03-24")
     update_call = sheets.spreadsheets().values().update.call_args
@@ -298,7 +334,7 @@ def test_write_theme_library_writes_header_and_data():
 
 
 def test_write_theme_library_empty_records():
-    sheets = MagicMock()
+    sheets = _write_mock()
     write_theme_library([], sheets, "sheet-id", "2026-03-24")
     update_call = sheets.spreadsheets().values().update.call_args
     written_rows = update_call.kwargs["body"]["values"]

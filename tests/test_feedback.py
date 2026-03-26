@@ -78,6 +78,23 @@ def test_find_latest_empty_list():
     assert find_latest_classified_notes_tab([]) is None
 
 
+def test_find_latest_versioned_picks_highest_version():
+    tabs = [
+        "classified-notes-2026-03-01-001",
+        "classified-notes-2026-03-01-002",
+        "classified-notes-2026-03-01-003",
+    ]
+    assert find_latest_classified_notes_tab(tabs) == "classified-notes-2026-03-01-003"
+
+
+def test_find_latest_versioned_later_date_beats_higher_version():
+    tabs = [
+        "classified-notes-2026-03-01-003",
+        "classified-notes-2026-03-02-001",
+    ]
+    assert find_latest_classified_notes_tab(tabs) == "classified-notes-2026-03-02-001"
+
+
 # ---------------------------------------------------------------------------
 # apply_decisions — Accept
 # ---------------------------------------------------------------------------
