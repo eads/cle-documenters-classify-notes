@@ -56,6 +56,7 @@ class ReviewDecision(TypedDict):
 
     source_question: str        # verbatim follow-up question (for representative passage)
     sub_topic: str              # agent's proposed sub-topic label
+    description: str            # agent's sub-topic description (seeds ThemeRecord on creation)
     topic: str                  # agent's proposed national topic
     question_type: str          # agent's assigned question type
     decision: str               # "Accept", "Rename", "Reject", or "" (blank = no action)
@@ -133,6 +134,7 @@ def read_classified_notes_decisions(sheets: Any, sheet_id: str) -> list[ReviewDe
             ReviewDecision(
                 source_question=get(row, "Source question"),
                 sub_topic=get(row, "Sub-topic"),
+                description=get(row, "Sub-topic description"),
                 topic=get(row, "Topic"),
                 question_type=get(row, "Question type"),
                 decision=get(row, "Decision"),
@@ -205,20 +207,30 @@ def apply_decisions(
             )
             continue
 
+        # Parse the topic for this decision row.
+        try:
+            topic = Topic(topic_str)
+        except ValueError:
+            topic = Topic.DEVELOPMENT
+            log.warning(
+                "feedback: unknown topic '%s' for '%s' — defaulting to DEVELOPMENT",
+                topic_str,
+                target_label,
+            )
+
         # Find or create the target ThemeRecord.
         if target_label not in library:
-            try:
-                topic = Topic(topic_str)
-            except ValueError:
-                topic = Topic.DEVELOPMENT
-                log.warning(
-                    "feedback: unknown topic '%s' for '%s' — defaulting to DEVELOPMENT",
-                    topic_str,
-                    target_label,
-                )
-            library[target_label] = ThemeRecord(sub_topic=target_label, topic=topic)
+            library[target_label] = ThemeRecord(sub_topic=target_label, topics=[topic])
 
         record = library[target_label]
+        # Accumulate topics — each question may associate this sub-topic with a
+        # different national taxonomy topic (cross-cutting themes appear under
+        # multiple topics over time).
+        if topic not in record.topics:
+            record.topics.append(topic)
+        # Seed description from the first decision row that carries one.
+        if not record.description and dec["description"]:
+            record.description = dec["description"]
         record.occurrence_count += 1
         record.add_passage(dec["source_question"])
 

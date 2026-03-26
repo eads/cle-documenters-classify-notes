@@ -116,7 +116,7 @@ def test_tab_name_prefix():
 # ---------------------------------------------------------------------------
 
 def test_column_count():
-    assert len(COLUMNS) == 16
+    assert len(COLUMNS) == 17
 
 
 def test_column_headers_match_spec():
@@ -126,6 +126,7 @@ def test_column_headers_match_spec():
         "Source question",
         "Topic",
         "Sub-topic",
+        "Sub-topic description",
         "Sub-topic confidence",
         "Decision",
         "Corrected sub-topic",
@@ -220,6 +221,18 @@ def test_data_row_sub_topic():
     rows = build_classified_notes_rows([make_classified_theme()], [make_ingested_doc()])
     row = rows[1]
     assert row[COLUMNS.index("Sub-topic")] == "lead pipe replacement funding"
+
+
+def test_data_row_sub_topic_description():
+    rows = build_classified_notes_rows([make_classified_theme()], [make_ingested_doc()])
+    row = rows[1]
+    assert row[COLUMNS.index("Sub-topic description")] == "Funding gaps for replacing lead service lines."
+
+
+def test_data_row_sub_topic_description_empty_string():
+    theme = make_classified_theme(description="")
+    rows = build_classified_notes_rows([theme], [make_ingested_doc()])
+    assert rows[1][COLUMNS.index("Sub-topic description")] == ""
 
 
 def test_data_row_topic():

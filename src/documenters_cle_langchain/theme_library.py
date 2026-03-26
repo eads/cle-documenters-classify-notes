@@ -75,8 +75,7 @@ class QuestionType(str, Enum):
 COLUMNS = [
     "Sub-topic",
     "Description",
-    "Topic",
-    "Canonical form",
+    "Included in topics",
     "Occurrences",
     "Knowledge gap",
     "Process confusion",
@@ -94,11 +93,14 @@ class ThemeRecord(BaseModel):
     in the classified notes tabs (fact table) and join here on ``sub_topic``.
     ``representative_passages`` holds up to 3 examples for retrieval display —
     not the full corpus.
+
+    ``topics`` accumulates all national taxonomy topics seen for this sub-topic
+    across runs.  Cross-cutting sub-topics (e.g. "transparency") will appear
+    under multiple topics; domain-specific ones will have a single entry.
     """
     sub_topic: str
     description: str = ""   # empty when theme is bootstrapped from a decision row
-    topic: Topic
-    canonical_form: str = ""            # empty → same as sub_topic
+    topics: list[Topic] = Field(default_factory=list)
     occurrence_count: int = 0
     # Question type distribution — denormalized rollup counts
     knowledge_gap_count: int = 0
@@ -121,8 +123,7 @@ class ThemeRecord(BaseModel):
         return [
             self.sub_topic,
             self.description,
-            self.topic.value,
-            self.canonical_form,
+            ", ".join(t.value for t in self.topics),
             self.occurrence_count,
             self.knowledge_gap_count,
             self.process_confusion_count,
@@ -156,11 +157,16 @@ class ThemeRecord(BaseModel):
         passages_raw = get("Representative passages", "")
         passages = [p.strip() for p in passages_raw.split(_SEP) if p.strip()]
 
+        # "Included in topics" is the current column name.  Older tabs wrote a
+        # single value under "Topic" — fall back to that for backward compat.
+        topics_raw = get("Included in topics", "") or get("Topic", "")
+        topic_strings = [t.strip() for t in topics_raw.split(",") if t.strip()]
+        topics = [Topic(ts) for ts in topic_strings]   # ValueError → caller skips row
+
         return cls(
             sub_topic=get("Sub-topic"),
             description=get("Description"),
-            topic=Topic(get("Topic")),
-            canonical_form=get("Canonical form"),
+            topics=topics,
             occurrence_count=get_int("Occurrences"),
             knowledge_gap_count=get_int("Knowledge gap"),
             process_confusion_count=get_int("Process confusion"),
