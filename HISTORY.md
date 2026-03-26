@@ -4,6 +4,54 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #17 — End-to-end fixture tests
+
+**Date:** 2026-03-25
+
+**Branch:** `issue-17-e2e-fixture-tests`
+
+**What was built:**
+
+Five fixture files in `tests/fixtures/`, each derived from a real Signal Cleveland Documenters note. Each fixture was chosen to cover a specific hard case:
+
+- `fixture_no_questions.txt` — Urban Forestry Budget Committee (Jan 2026). No Follow-Up Questions section. Tests the graceful empty path: full graph runs without LLM calls.
+- `fixture_single_question.txt` — Cleveland City Council Health, Human Services and Arts Committee (Jan 2026). One question with skepticism/accountability ambiguity. Tests question type edge cases once integration tests are implemented.
+- `fixture_inline_editor_note.txt` — Cuyahoga County Council (Mar 2025). Editor's note inline in the first question (`[Editor's note: The City of Cleveland is one partner...]`). Tests that inline editorial annotations survive question parsing. The Browns stadium question also spans DEVELOPMENT + BUDGET + POLITICS topics.
+- `fixture_land_bank.txt` — Cuyahoga County Land Bank Board (Mar 2025). Three questions spanning governance, housing policy, and legal context. Notes section opens with a URL (`Agenda: https://...`), testing the extraction module's tolerance for URLs in the notes body.
+- `fixture_public_safety.txt` — Public Safety Technology Advisory Committee (Sep 2024). Three questions with accountability/continuity overlap. Tests question type classification edge cases once integration tests are implemented.
+
+`tests/conftest.py` — auto-skips integration tests when `OPENAI_API_KEY` is absent. Uses `pytest_collection_modifyitems` so the skip is applied at collection time without requiring the `@pytest.mark.skipif` boilerplate on every test.
+
+`pyproject.toml` — updated integration marker description to mention LLM APIs alongside Google APIs, since that is now the primary guard.
+
+`tests/test_e2e.py` — 12 CI tests (no LLM), 5 integration stubs (marked `# TK: integration`).
+
+CI tests cover:
+- Each fixture passes or fails the ingest gate as expected (all 5 pass).
+- Parsed question counts match the fixture content (0, 1, 3, 3, 3).
+- Inline editor's note survives question parsing intact.
+- Agency, ISO date, and meeting name extracted correctly from the Health fixture.
+- Full graph on the no-questions fixture completes without LLM calls.
+- Full graph on empty manifest completes without LLM calls.
+
+Integration stubs are skeleton tests with `pytest.skip("TK: integration — not yet implemented")`. They will be fleshed out after the first real run when OPENAI_API_KEY is available.
+
+**Key decisions:**
+
+- **Only the no-questions fixture can drive a full CI graph run.** With the current graph topology, any question in `retrieval_context` causes `_extract_candidates` to instantiate `ChatOpenAI`. The Urban Forestry fixture has no follow-up questions, so `retrieval_context` is empty and `extract_candidates` short-circuits before touching the OpenAI API. All other fixtures require real LLM calls to exercise beyond ingest.
+
+- **Fixture content includes editor's notes verbatim.** The inline `[Editor's note: ...]` in the County Council fixture is preserved in the question text by design — it provides real context for the LLM. The CI test asserts it survives; the integration test (stub) will verify the LLM handles it gracefully.
+
+- **Fixtures are trimmed but realistic.** Very long Notes sections were shortened to keep fixtures manageable, but the section structure, metadata, and full Follow-Up Questions sections are unmodified from the real Google Docs exports. The hard-case content (inline notes, cross-topic questions, URL in Notes) is preserved exactly as exported.
+
+**Deferred:**
+
+- Integration test bodies: stubs only. Will be implemented once we have an OPENAI_API_KEY in the test environment and have run the pipeline at least once.
+
+- The City Council HEAP Winter Crisis fixture (one very long question) was not included. It's a valid hard case (question longer than a sentence with nested sub-questions) but the five fixtures already cover the scope of this issue. Can be added when integration tests are implemented.
+
+---
+
 ## Issue #16 — Human review feedback: read decisions, update Theme Library
 
 **Date:** 2026-03-25
