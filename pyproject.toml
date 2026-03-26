@@ -31,7 +31,7 @@ dev = [
 [tool.pytest.ini_options]
 env_files = [".env"]
 markers = [
-    "integration: tests that hit live Google APIs (require GOOGLE_APPLICATION_CREDENTIALS)",
+    "integration: tests that call live LLM or Google APIs (require OPENAI_API_KEY / GOOGLE_APPLICATION_CREDENTIALS)",
 ]
 
 [build-system]
