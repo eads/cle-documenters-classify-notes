@@ -38,12 +38,27 @@ def extract_text(doc: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _run_text(elem: dict) -> str:
+    """Extract text from one paragraph element, preserving hyperlink URLs.
+
+    When a text run carries a hyperlink, emits ``link text (url)`` so the
+    LLM has the full reference rather than just the anchor text.
+    Bare text runs (no link) are returned as-is.
+    """
+    run = elem.get("textRun", {})
+    content = run.get("content", "")
+    url = run.get("textStyle", {}).get("link", {}).get("url", "")
+    if url and content.strip():
+        return f"{content.rstrip(chr(10))} ({url})"
+    return content
+
+
 def _paragraph(para: dict) -> str:
     style = para.get("paragraphStyle", {}).get("namedStyleType", "NORMAL_TEXT")
     bullet = para.get("bullet")
 
     text = "".join(
-        elem.get("textRun", {}).get("content", "")
+        _run_text(elem)
         for elem in para.get("elements", [])
     ).rstrip("\n")
 
