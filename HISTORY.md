@@ -4,6 +4,34 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #34 — Skip writing empty theme-overview tab on cold start
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-34-skip-empty-theme-overview`
+
+**What was built:**
+
+`write_back` in `graph.py` now checks whether `theme_library` is empty before calling `write_theme_library`. On cold start (empty library), it logs a message and skips the write. The `run_summary` reflects the actual count: `sheets_written: 1` and `theme_overview_tab: None`.
+
+Two new tests in `test_graph.py`:
+- `test_write_back_skips_theme_tab_on_cold_start` — asserts `write_theme_library` is not called and `theme_overview_tab` is `None` when the library is empty.
+- `test_write_back_writes_theme_tab_when_library_populated` — asserts `write_theme_library` is called exactly once and `sheets_written == 2` when the library has records.
+
+279 tests pass, 5 integration stubs skip.
+
+**Key decisions:**
+
+- **Option A chosen: skip the write entirely.** `load_library` already handles "no theme tab found" cleanly on cold start — it logs "cold start" and returns an empty library without error. Writing a header-only tab would confuse operators (can't tell if something went wrong vs. normal cold-start behavior). The classified-notes tab is sufficient evidence that the run happened.
+
+- **The open question ("is the tab useful as a timestamp?") is deferred.** The issue flagged this as "no right answer is obvious — flag for a real run to decide." After the first bootstrapping run, if operators want a run-timestamp artifact independent of classified-notes, a lightweight option is to write a single-row tab with just the run date. Not implemented now.
+
+**Deferred:**
+
+- Run-timestamp artifact separate from classified-notes tab — deferred until after the first real run, when operator workflow is clearer.
+
+---
+
 ## Issue #18 — CLI and GitHub Actions: wire new graph, remove old pipeline
 
 **Date:** 2026-03-25
