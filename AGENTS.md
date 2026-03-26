@@ -52,3 +52,7 @@ Requires `OPENAI_API_KEY` and Google credentials in `.env`.
 
 - Terse and clear. Prefixes: `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`.
 - One logical change per commit.
+
+## Pull Requests
+
+After completing each issue (code committed, HISTORY entry written), open a PR targeting `main`. Include `Closes #N` in the PR body so GitHub auto-closes the issue on merge.
