@@ -182,8 +182,23 @@ def write_back(state: GraphState) -> dict:
         sheet_id,
         state["run_date"],
     )
+
+    theme_library = state.get("theme_library") or []
+    if not theme_library:
+        log.info(
+            "write_back: theme library is empty — skipping theme-overview tab "
+            "(cold start; library will populate after first review cycle)"
+        )
+        return {
+            "run_summary": {
+                "classified_notes_tab": classified_tab,
+                "theme_overview_tab": None,
+                "sheets_written": 1,
+            }
+        }
+
     theme_tab = write_theme_library(
-        state["theme_library"],
+        theme_library,
         sheets,
         sheet_id,
         state["run_date"],
