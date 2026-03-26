@@ -60,14 +60,14 @@ def _housing_record(**kwargs) -> ThemeRecord:
     defaults = dict(
         sub_topic="Rental inspection enforcement",
         description="Questions about how rental inspection requirements are enforced",
-        topic=Topic.HOUSING,
+        topics=[Topic.HOUSING],
     )
     return ThemeRecord(**{**defaults, **kwargs})
 
 
 def test_theme_record_defaults():
     r = _housing_record()
-    assert r.canonical_form == ""
+    assert r.topics == [Topic.HOUSING]
     assert r.occurrence_count == 0
     assert r.knowledge_gap_count == 0
     assert r.representative_passages == []
@@ -101,7 +101,7 @@ def test_add_passage_no_duplicates():
 # ---------------------------------------------------------------------------
 
 def test_columns_count():
-    assert len(COLUMNS) == 11
+    assert len(COLUMNS) == 10
 
 
 def test_to_row_length_matches_columns():
@@ -119,7 +119,7 @@ def test_round_trip_basic():
     restored = ThemeRecord.from_row(row, COLUMNS)
     assert restored.sub_topic == r.sub_topic
     assert restored.description == r.description
-    assert restored.topic == r.topic
+    assert restored.topics == [Topic.HOUSING]
     assert restored.occurrence_count == 5
     assert restored.knowledge_gap_count == 3
     assert restored.accountability_count == 2
@@ -144,19 +144,29 @@ def test_round_trip_empty_passages():
     assert restored.representative_passages == []
 
 
-def test_round_trip_canonical_form():
-    r = _housing_record(canonical_form="Rental code enforcement")
+def test_round_trip_multi_topic():
+    """A sub-topic seen under multiple national topics survives round-trip."""
+    r = _housing_record(topics=[Topic.HOUSING, Topic.EDUCATION])
     row = r.to_row()
     restored = ThemeRecord.from_row(row, COLUMNS)
-    assert restored.canonical_form == "Rental code enforcement"
+    assert restored.topics == [Topic.HOUSING, Topic.EDUCATION]
 
 
 def test_round_trip_topic_with_space():
     """Topics like 'CRIMINAL JUSTICE' must survive the round-trip."""
-    r = _housing_record(topic=Topic.CRIMINAL_JUSTICE)
+    r = _housing_record(topics=[Topic.CRIMINAL_JUSTICE])
     row = r.to_row()
     restored = ThemeRecord.from_row(row, COLUMNS)
-    assert restored.topic == Topic.CRIMINAL_JUSTICE
+    assert restored.topics == [Topic.CRIMINAL_JUSTICE]
+
+
+def test_from_row_backward_compat_old_topic_column():
+    """Old tabs with a single 'Topic' column (not 'Included in topics') are read correctly."""
+    headers = ["Sub-topic", "Description", "Topic", "Occurrences"]
+    row = ["Rent control", "About rent control", "HOUSING", "3"]
+    r = ThemeRecord.from_row(row, headers)
+    assert r.topics == [Topic.HOUSING]
+    assert r.occurrence_count == 3
 
 
 def test_from_row_tolerates_short_row():
@@ -284,7 +294,7 @@ def test_read_theme_library_picks_latest_tab():
 
 def test_read_theme_library_skips_malformed_rows(caplog):
     """A row with an invalid Topic value is skipped with a warning."""
-    bad_row = ["Sub", "Desc", "NOT_A_VALID_TOPIC", "", "0", "0", "0", "0", "0", "0", ""]
+    bad_row = ["Sub", "Desc", "NOT_A_VALID_TOPIC", "0", "0", "0", "0", "0", "0", ""]
     rows = [COLUMNS, bad_row]
     sheets = _mock_sheets(["theme-overview-2026-01-01"], rows)
     with caplog.at_level("WARNING"):

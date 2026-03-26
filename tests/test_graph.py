@@ -186,7 +186,7 @@ def test_write_back_writes_theme_tab_when_library_populated():
     no ingested_docs, so retrieval does nothing — we only care about write_back.
     """
     from documenters_cle_langchain.theme_library import ThemeRecord, Topic
-    record = ThemeRecord(sub_topic="lead pipes", topic=Topic.UTILITIES)
+    record = ThemeRecord(sub_topic="lead pipes", topics=[Topic.UTILITIES])
     state = {**MINIMAL_STATE, "sheet_id": "sheet-abc"}
     graph = build_graph()
     mock_write_theme = MagicMock(return_value="theme-overview-2026-03-24")

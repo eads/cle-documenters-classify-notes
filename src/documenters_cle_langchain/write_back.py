@@ -44,6 +44,7 @@ COLUMNS = [
     "Source question",
     "Topic",
     "Sub-topic",
+    "Sub-topic description",
     "Sub-topic confidence",
     # --- reporter decision columns (blank on write) ---
     "Decision",
@@ -130,6 +131,7 @@ def build_classified_notes_rows(
             theme.source_question,                          # Source question
             theme.topic,                                    # Topic
             theme.sub_topic,                                # Sub-topic
+            theme.description or "",                        # Sub-topic description
             round(theme.merge_confidence, 2),               # Sub-topic confidence
             "",                                             # Decision
             "",                                             # Corrected sub-topic

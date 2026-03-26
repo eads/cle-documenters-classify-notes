@@ -90,7 +90,7 @@ def build_vector_store(
         {
             "sub_topic": t.sub_topic,
             "description": t.description,
-            "topic": t.topic.value,
+            "topic": ", ".join(t2.value for t2 in t.topics),
         }
         for t in themes
     ]

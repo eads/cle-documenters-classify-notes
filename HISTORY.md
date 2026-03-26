@@ -4,6 +4,45 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #53 — Theme overview schema: multi-valued topics, drop canonical_form, populate description
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-53-schema-multi-topics-description`
+
+**What was built:**
+
+Three related schema fixes across `theme_library.py`, `write_back.py`, `feedback.py`, and `retrieve_context.py`. No logic restructuring — each change is a targeted fix to a specific gap.
+
+**1. `topics: list[Topic]` replaces `topic: Topic` in `ThemeRecord`**
+
+The old single-valued `topic` field froze the national taxonomy association at first creation. Cross-cutting sub-topics like "transparency" may appear under HOUSING in one meeting and EDUCATION in another — the library now accumulates all observed topics. `apply_decisions` adds the incoming topic to `record.topics` on every Accept/Rename (using `if topic not in record.topics` to prevent duplicates). New records are created with `topics=[topic]`.
+
+`to_row` serializes as a comma-separated string. `from_row` parses "Included in topics" first, then falls back to the old "Topic" column header for backward compat with existing tabs. `retrieve_context.py`'s vector store metadata also updated to join the topics list.
+
+**2. `canonical_form` removed**
+
+Never populated by anything — `apply_decisions` didn't set it, nothing read it. The Rename decision already provides canonical naming by making the corrected label the library key. Removed from `ThemeRecord`, `COLUMNS`, `to_row`, and `from_row`. The `get` helper in `from_row` already tolerates missing columns, so old tabs are unaffected.
+
+**3. "Sub-topic description" added to classified-notes tab; description flows to ThemeRecord**
+
+`ThemeCandidate.description` (produced by extraction) was being silently dropped — `write_back.py` had no column for it, so `ReviewDecision` never carried it and `apply_decisions` could never populate `ThemeRecord.description`. Fixed by:
+- Adding "Sub-topic description" to `write_back.COLUMNS` and `build_classified_notes_rows`
+- Adding `description: str` to `ReviewDecision` and reading it from "Sub-topic description" in `read_classified_notes_decisions`
+- In `apply_decisions`, seeding `record.description` from the first decision row that carries one (existing descriptions are not overwritten)
+
+The same seed-on-first behavior applies on Rename — the renamed-to theme gets the description from the decision row if it has none yet.
+
+**Tests:** 10 new tests covering multi-topic accumulation, no-duplicate topic logic, description seeding, description preservation, backward-compat tab read, and sub-topic description column round-trip. 314 total pass (5 skipped, unchanged).
+
+**Key decisions:**
+
+- **Seed-not-overwrite for description.** On Accept, we don't overwrite an existing description with a new decision row's description. The first human-confirmed description wins. This prevents a later, lower-quality extraction from silently replacing one that a reviewer already implicitly approved.
+- **Comma-join for topics display.** The "Included in topics" column stores a comma-separated string (e.g. `"HOUSING, EDUCATION"`). This is human-readable in the sheet, parseable on the way back in, and doesn't require a new column per topic.
+- **`retrieve_context.py` metadata.** The vector store metadata `topic` key is now the comma-joined topics string. `_format_retrieved_context` in `write_back.py` already treats it as a display string, so no change needed there.
+
+---
+
 ## Issue #47 — Fix sub-topic extraction prompt: recurring labels, not question summaries
 
 **Date:** 2026-03-26

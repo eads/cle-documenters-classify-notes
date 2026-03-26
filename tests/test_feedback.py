@@ -30,7 +30,7 @@ def make_theme(**kwargs) -> ThemeRecord:
     defaults = dict(
         sub_topic="lead pipe replacement funding",
         description="Funding gaps for replacing lead service lines.",
-        topic=Topic.UTILITIES,
+        topics=[Topic.UTILITIES],
         occurrence_count=2,
     )
     return ThemeRecord(**{**defaults, **kwargs})
@@ -40,6 +40,7 @@ def make_decision(**kwargs) -> ReviewDecision:
     defaults: ReviewDecision = {  # type: ignore[assignment]
         "source_question": "When will the city replace the lead pipes?",
         "sub_topic": "lead pipe replacement funding",
+        "description": "Funding gaps for replacing lead service lines.",
         "topic": "UTILITIES",
         "question_type": "knowledge_gap",
         "decision": DECISION_ACCEPT,
@@ -120,7 +121,7 @@ def test_accept_creates_new_theme_when_not_in_library():
     result = apply_decisions([], decisions)
     assert len(result) == 1
     assert result[0].sub_topic == "new civic issue"
-    assert result[0].topic == Topic.HOUSING
+    assert Topic.HOUSING in result[0].topics
     assert result[0].occurrence_count == 1
 
 
@@ -168,7 +169,7 @@ def test_reject_does_not_increment_existing_theme():
 # ---------------------------------------------------------------------------
 
 def test_rename_to_existing_theme_increments_count():
-    existing = make_theme(sub_topic="Section 8 voucher waitlists", topic=Topic.HOUSING, occurrence_count=3)
+    existing = make_theme(sub_topic="Section 8 voucher waitlists", topics=[Topic.HOUSING], occurrence_count=3)
     decisions = [make_decision(
         decision=DECISION_RENAME,
         sub_topic="housing voucher delays",
@@ -183,7 +184,7 @@ def test_rename_to_existing_theme_increments_count():
 def test_rename_to_existing_adds_passage_without_duplication():
     existing = make_theme(
         sub_topic="Section 8 voucher waitlists",
-        topic=Topic.HOUSING,
+        topics=[Topic.HOUSING],
     )
     existing.add_passage("When will the city replace the lead pipes?")
     decisions = [make_decision(
@@ -208,7 +209,7 @@ def test_rename_to_new_label_creates_theme():
     result = apply_decisions([], decisions)
     assert len(result) == 1
     assert result[0].sub_topic == "better label"
-    assert result[0].topic == Topic.EDUCATION
+    assert Topic.EDUCATION in result[0].topics
     assert result[0].occurrence_count == 1
 
 
@@ -305,7 +306,7 @@ def test_lowercase_rename_is_treated_as_rename():
 def test_base_themes_not_referenced_by_decisions_are_preserved():
     library = [
         make_theme(sub_topic="lead pipe replacement funding"),
-        make_theme(sub_topic="school closure process", topic=Topic.EDUCATION),
+        make_theme(sub_topic="school closure process", topics=[Topic.EDUCATION]),
     ]
     decisions = [make_decision(sub_topic="lead pipe replacement funding")]
     result = apply_decisions(library, decisions)
@@ -363,7 +364,66 @@ def test_unknown_topic_string_defaults_gracefully():
     )]
     result = apply_decisions([], decisions)
     assert len(result) == 1
-    assert result[0].topic == Topic.DEVELOPMENT
+    assert Topic.DEVELOPMENT in result[0].topics
+
+
+def test_accept_adds_new_topic_to_existing_themes_list():
+    """Accepting a question under a different topic adds that topic to the list."""
+    library = [make_theme(topics=[Topic.UTILITIES])]
+    decisions = [make_decision(decision=DECISION_ACCEPT, topic="HOUSING")]
+    result = apply_decisions(library, decisions)
+    theme = next(r for r in result if r.sub_topic == "lead pipe replacement funding")
+    assert Topic.UTILITIES in theme.topics
+    assert Topic.HOUSING in theme.topics
+
+
+def test_accept_does_not_duplicate_topic():
+    """Accepting the same topic twice does not create duplicates."""
+    library = [make_theme(topics=[Topic.UTILITIES])]
+    decisions = [
+        make_decision(decision=DECISION_ACCEPT, topic="UTILITIES"),
+        make_decision(decision=DECISION_ACCEPT, topic="UTILITIES", source_question="Q2"),
+    ]
+    result = apply_decisions(library, decisions)
+    theme = next(r for r in result if r.sub_topic == "lead pipe replacement funding")
+    assert theme.topics.count(Topic.UTILITIES) == 1
+
+
+def test_accept_seeds_description_when_empty():
+    """Description is populated from first decision row when record has none."""
+    library = [make_theme(description="")]
+    decisions = [make_decision(
+        decision=DECISION_ACCEPT,
+        description="Funding gaps for replacing lead service lines.",
+    )]
+    result = apply_decisions(library, decisions)
+    theme = next(r for r in result if r.sub_topic == "lead pipe replacement funding")
+    assert theme.description == "Funding gaps for replacing lead service lines."
+
+
+def test_accept_does_not_overwrite_existing_description():
+    """Existing description is preserved even when the decision row carries one."""
+    library = [make_theme(description="Original description.")]
+    decisions = [make_decision(
+        decision=DECISION_ACCEPT,
+        description="Different description.",
+    )]
+    result = apply_decisions(library, decisions)
+    theme = next(r for r in result if r.sub_topic == "lead pipe replacement funding")
+    assert theme.description == "Original description."
+
+
+def test_rename_seeds_description_on_new_theme():
+    """Rename to a new label seeds the description from the decision row."""
+    decisions = [make_decision(
+        decision=DECISION_RENAME,
+        sub_topic="bad label",
+        corrected_sub_topic="better label",
+        topic="EDUCATION",
+        description="A description for the renamed theme.",
+    )]
+    result = apply_decisions([], decisions)
+    assert result[0].description == "A description for the renamed theme."
 
 
 def test_all_question_type_counts_increment_correctly():
@@ -414,6 +474,7 @@ def test_read_decisions_parses_rows():
     data_row = [""] * len(NOTES_COLUMNS)
     data_row[NOTES_COLUMNS.index("Source question")] = "Lead pipe question"
     data_row[NOTES_COLUMNS.index("Sub-topic")] = "lead pipe replacement funding"
+    data_row[NOTES_COLUMNS.index("Sub-topic description")] = "Funding gaps."
     data_row[NOTES_COLUMNS.index("Topic")] = "UTILITIES"
     data_row[NOTES_COLUMNS.index("Question type")] = "knowledge_gap"
     data_row[NOTES_COLUMNS.index("Decision")] = "Accept"
@@ -428,6 +489,7 @@ def test_read_decisions_parses_rows():
     assert len(result) == 1
     assert result[0]["source_question"] == "Lead pipe question"
     assert result[0]["sub_topic"] == "lead pipe replacement funding"
+    assert result[0]["description"] == "Funding gaps."
     assert result[0]["decision"] == "Accept"
 
 

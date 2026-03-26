@@ -53,7 +53,7 @@ def make_theme(
     description: str,
     topic: Topic = Topic.HOUSING,
 ) -> ThemeRecord:
-    return ThemeRecord(sub_topic=sub_topic, description=description, topic=topic)
+    return ThemeRecord(sub_topic=sub_topic, description=description, topics=[topic])
 
 
 def make_doc(doc_id: str, questions: list[str]) -> IngestedDoc:
