@@ -88,6 +88,13 @@ should both be labeled "transparency", not "housing transparency" and \
 underlying issue, use that label. Only create a new label when the question \
 is genuinely distinct from all retrieved themes.
 
+**One issue per label — no compound labels.** A sub-topic label names a \
+single civic concern. Never combine multiple issues into one label using \
+commas or slashes. Bad: "prisons, motherhood and pregnancy" — that is two \
+separate sub-topics: "prenatal care in county jails" and "maternal \
+reentry support". If a question covers two distinct issues, return two \
+separate sub-topic entries.
+
 Your job: given a follow-up question from a community reporter, propose one or \
 more sub-topic labels and 1-2 sentence descriptions of the underlying civic \
 concerns. Most questions map to exactly one sub-topic — only propose multiple \
