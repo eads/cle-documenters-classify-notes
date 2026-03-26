@@ -4,6 +4,35 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #38 — Tab names: incremental version suffix
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-38-tab-versioning`
+
+**What was built:**
+
+Tab names now include a zero-padded three-digit version suffix:
+
+- `classified-notes-2026-03-26-001`, `classified-notes-2026-03-26-002`, …
+- `theme-overview-2026-03-26-001`, `theme-overview-2026-03-26-002`, …
+
+`next_classified_notes_tab_name(run_date, existing_titles)` replaces `classified_notes_tab_name(run_date)` in `write_back.py`. `next_theme_tab_name(run_date, existing_titles)` replaces `theme_tab_name(run_date)` in `theme_library.py`. Both are pure functions: they count existing tabs matching the `{prefix}{date}-` pattern and increment.
+
+`write_classified_notes` and `write_theme_library` each call `spreadsheets().get()` to fetch existing tab titles before creating the new tab. `find_latest_classified_notes_tab` and `find_latest_theme_tab` are unchanged — lexicographic `max()` already handles the new format correctly (`-003` > `-002`, later date beats any suffix).
+
+10 new tests across `test_write_back.py`, `test_theme_library.py`, and `test_feedback.py`. 289 total pass.
+
+**Key decisions:**
+
+- **Version is determined at write time, not passed in.** The write functions query Sheets for existing tabs and compute the next version. This keeps the caller interface simple (run_date only) and avoids passing state the caller shouldn't need to track.
+
+- **Pure naming functions, I/O in the write functions.** `next_*_tab_name` are pure and testable without credentials. All Sheets I/O remains in `write_classified_notes` / `write_theme_library`.
+
+- **No `find_latest_*` changes needed.** The new suffix format sorts correctly with lexicographic `max()` — a later date always beats a higher version on an earlier date, and higher versions on the same date sort correctly.
+
+---
+
 ## Issue #34 — Skip writing empty theme-overview tab on cold start
 
 **Date:** 2026-03-26
