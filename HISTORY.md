@@ -4,6 +4,32 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #47 — Fix sub-topic extraction prompt: recurring labels, not question summaries
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-47-fix-subtopic-specificity`
+
+**What was built:**
+
+Prompt changes only in `extract_candidates.py`. No logic changes.
+
+- Replaced the "specific, concrete" sub-topic framing with "recurring civic issue — specific enough to track, but abstract enough to recur across multiple Cleveland meetings over a year."
+- Added four counter-examples in the system prompt showing over-specific → right-level pairs drawn from the issue (e.g. "municipal hiring freeze timeline" → "municipal staffing and hiring"; "grant reconciliation reporting transparency" → "budget reporting transparency").
+- Added guidance to name the underlying civic issue when a question is about a specific bill, fund, or timeline — unless a retrieved theme already tracks that specific instance (RAG-established names are preserved).
+- Corrected the cross-cutting theme guidance: abstract concepts like "transparency" and "accountability" should NOT carry a domain qualifier — a transparency concern at a housing meeting and one at a schools meeting both get labeled "transparency", not "housing transparency" / "schools transparency".
+- Added directive in both system and user prompts to prefer retrieved theme labels when there's a close match.
+- Removed "specific" from the label quality description; replaced with "lowercase and suitable as canonical theme names."
+
+6 new prompt-content tests. 304 total pass.
+
+**Key decisions:**
+
+- Cross-cutting vs. domain-specific: the updated issue clarified that abstract concerns ("transparency", "accountability") should share a single cross-domain label. The earlier draft I wrote had this backwards (instructing the model to add domain qualifiers). Corrected before commit.
+- RAG exception for specific instances: the owner's comment asked that we preserve named labels for specific bills/funds/initiatives when they were previously named by a human reviewer. The guidance threads this: default to the abstract underlying issue, but defer to a retrieved label when one exists.
+
+---
+
 ## Issue #46 — Case-insensitive decision matching in feedback.apply_decisions
 
 **Date:** 2026-03-26
