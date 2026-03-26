@@ -4,6 +4,45 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #39 — Classified notes column order, renames, numeric QT confidence
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-39-column-order`
+
+**Also fixes:** Issue #41 (test failing without `OPENAI_API_KEY`)
+
+**What was built:**
+
+Rearranged and renamed the classified notes tab columns. Changes to `write_back.py` only — `feedback.py` uses header-name lookup and does not read any of the renamed columns, so no changes there.
+
+**New column order:**
+Meeting date | Meeting body | Source question | Topic | Sub-topic | Sub-topic confidence | Decision | Corrected sub-topic | Question type | Proposed new question type | Question type override | Question type confidence | Notes | Needs review | GDoc URL | Retrieved similar themes
+
+**Renames:**
+- `Confidence` → `Sub-topic confidence` (float, unchanged behavior)
+- `Question type: low confidence` (yes/"" flag) → `Question type confidence` (float from `ClassifiedTheme.question_type_confidence`)
+- `Doc URL` → `GDoc URL`
+
+**Structural changes:**
+- Decision columns (`Decision`, `Corrected sub-topic`, `Proposed new question type`, `Question type override`, `Notes`) now grouped together in the middle.
+- Triage / reference columns (`Needs review`, `GDoc URL`, `Retrieved similar themes`) moved to the end.
+- `Question type` moved into the decision block (adjacent to its override and proposed-new columns).
+
+**Issue #41 fix:** `test_write_back_writes_theme_tab_when_library_populated` failed without `OPENAI_API_KEY` because a populated theme library causes `retrieve_context` to construct `OpenAIEmbeddings`. Patching `langchain_openai.OpenAIEmbeddings` in the test prevents the constructor from reading the environment. Added a comment explaining why. 278 tests pass, 5 integration stubs skip.
+
+**Key decisions:**
+
+- **`question_type_confidence` float replaces the boolean flag.** The boolean was derived from `question_type_low_confidence OR proposed_new_question_type`, which lost information. Using `ClassifiedTheme.question_type_confidence` directly gives reporters a sortable score. `proposed_new_question_type` remains a blank decision column for reporters to fill in.
+
+- **`feedback.py` unchanged.** It reads columns by name and does not touch any of the renamed columns (`Confidence`, `Doc URL`, `Question type: low confidence`).
+
+**Deferred:**
+
+- Pre-filling `Proposed new question type` with the model's suggestion (`theme.proposed_new_question_type`) when one exists — deferred until after the first real run to decide whether that's useful or confusing.
+
+---
+
 ## Issue #38 — Tab names: incremental version suffix
 
 **Date:** 2026-03-26
