@@ -253,6 +253,52 @@ def test_unknown_decision_is_skipped():
 
 
 # ---------------------------------------------------------------------------
+# apply_decisions — Case-insensitive decision matching (Issue #46)
+# ---------------------------------------------------------------------------
+
+def test_uppercase_accept_is_treated_as_accept():
+    decisions = [make_decision(decision="ACCEPT", sub_topic="some theme", topic="HOUSING")]
+    result = apply_decisions([], decisions)
+    assert len(result) == 1
+
+
+def test_uppercase_rename_is_treated_as_rename():
+    decisions = [make_decision(
+        decision="RENAME",
+        sub_topic="bad label",
+        corrected_sub_topic="good label",
+        topic="HOUSING",
+    )]
+    result = apply_decisions([], decisions)
+    assert len(result) == 1
+    assert result[0].sub_topic == "good label"
+
+
+def test_uppercase_reject_is_treated_as_reject():
+    decisions = [make_decision(decision="REJECT", sub_topic="should not appear")]
+    result = apply_decisions([], decisions)
+    assert result == []
+
+
+def test_lowercase_accept_is_treated_as_accept():
+    decisions = [make_decision(decision="accept", sub_topic="some theme", topic="HOUSING")]
+    result = apply_decisions([], decisions)
+    assert len(result) == 1
+
+
+def test_lowercase_rename_is_treated_as_rename():
+    decisions = [make_decision(
+        decision="rename",
+        sub_topic="bad label",
+        corrected_sub_topic="good label",
+        topic="HOUSING",
+    )]
+    result = apply_decisions([], decisions)
+    assert len(result) == 1
+    assert result[0].sub_topic == "good label"
+
+
+# ---------------------------------------------------------------------------
 # apply_decisions — Base library preservation
 # ---------------------------------------------------------------------------
 

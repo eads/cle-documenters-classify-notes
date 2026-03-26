@@ -4,6 +4,24 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #46 — Case-insensitive decision matching in feedback.apply_decisions
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-46-case-insensitive-decisions`
+
+**What was built:**
+
+One-line fix in `apply_decisions`: `.strip().title()` normalises the incoming decision value before comparison, so `"RENAME"`, `"rename"`, and `"Rename"` all route correctly. Previously `"RENAME"` fell through to the unknown-decision warning and was silently skipped.
+
+5 new tests covering `ACCEPT`/`RENAME`/`REJECT` in uppercase and `accept`/`rename` in lowercase. 299 total pass.
+
+**Key decisions:**
+
+- `.title()` is the right normaliser here: decision values are single title-case words, so `.title()` converts any casing to the canonical form without affecting anything else. `.lower()` would require changing the constants or comparisons; `.title()` requires no other changes.
+
+---
+
 ## Issue #44 — Support multiple sub-topics (and output rows) per question
 
 **Date:** 2026-03-26
