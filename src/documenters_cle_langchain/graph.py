@@ -172,7 +172,7 @@ def write_back(state: GraphState) -> dict:
         return {"run_summary": {"sheets_written": 0}}
 
     from .theme_library import build_sheets_client, write_theme_library
-    from .write_back import write_classified_notes
+    from .write_back import enrich_library_descriptions, write_classified_notes
 
     sheets = build_sheets_client()
     classified_tab = write_classified_notes(
@@ -196,6 +196,8 @@ def write_back(state: GraphState) -> dict:
                 "sheets_written": 1,
             }
         }
+
+    enrich_library_descriptions(theme_library, state.get("classified_themes") or [])
 
     theme_tab = write_theme_library(
         theme_library,
