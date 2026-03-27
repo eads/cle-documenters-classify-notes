@@ -30,8 +30,8 @@ The Theme Library starts empty and grows through your decisions. Early runs will
 
 Each run produces a new tab in the Google Sheet. There are two kinds of tabs:
 
-- **classified-notes-YYYY-MM-DD** — the working sheet for that run. One row per follow-up question. This is where you work.
-- **theme-overview-YYYY-MM-DD** — a read-only summary of the Theme Library after that run. You can read it to understand what themes exist, but don't edit it — the system regenerates it each run. It's there for your reference.
+- **notes-YYYY-MM-DD-NNN** — the working sheet for that run. One row per follow-up question. This is where you work.
+- **themes-YYYY-MM-DD-NNN** — a read-only snapshot of the Theme Library after that run. You can read it to understand what sub-topics exist, but don't edit it — the system regenerates it each run.
 
 ### Quick orientation to the classified notes tab
 
@@ -45,49 +45,61 @@ A reporter with no prior context should be able to decide a row in under a minut
 
 ## Column guide
 
-### Columns the system fills in (read-only)
+Columns are grouped so each classification sits next to its decision and correction fields. The first columns you'll work in are the sub-topic group; topic is at the far right because it's the broadest category and least often corrected.
+
+### Source context (read-only)
 
 | Column | What it contains |
 |--------|------------------|
 | **Meeting date** | When the meeting happened |
 | **Meeting body** | Which public body held the meeting (e.g., "Cleveland City Council") |
 | **Source question** | The follow-up question exactly as the reporter wrote it |
-| **Topic** | Broad category from the national Documenters taxonomy (e.g., HOUSING, EDUCATION, TRANSPORTATION) |
-| **Topic decision / Corrected topic** | Your decision on the topic assignment (blank on write) |
+
+### Sub-topic group
+
+| Column | What it contains |
+|--------|------------------|
 | **Sub-topic** | The specific civic issue the question is about — the system's core classification |
-| **Sub-topic confidence** | How confident the system is in its sub-topic classification (0–1). Rows below 0.7 are flagged for review. |
-| **Sub-topic decision / Corrected sub-topic** | Your decision on the sub-topic (blank on write) |
+| **Sub-topic confidence** | How confident the system is (0–1). Rows below 0.7 are flagged in Needs review. |
+| **Sub-topic decision** | *You fill this in.* Choose **Accept**, **Reject**, or **Rename** from the dropdown. |
+| **Corrected sub-topic** | *You fill this in — Rename only.* The label you want: an existing sub-topic to merge into, or a new name. |
+
+### Question type group
+
+| Column | What it contains |
+|--------|------------------|
 | **Question type** | What kind of question it is (see below) |
-| **Question type confidence** | How confident the system is in the question type (0–1) |
-| **Question type decision / Corrected question type** | Your decision on the question type (blank on write) |
-| **Needs review** | "yes" if the system is uncertain and wants your input. Use this to filter for priority rows. |
-| **GDoc URL** | Link to the source Google Doc (the original meeting notes) |
-| **Sub-topic description** | A one-sentence description of what this sub-topic covers — reference only, scroll right to see it |
-| **Retrieved similar themes** | Existing sub-topics from the library most similar to this question — the evidence behind the proposed classification |
+| **Question type confidence** | How confident the system is (0–1) |
+| **Question type decision** | *You fill this in — only if wrong.* Choose **Rename**, then enter the correct type in Corrected question type. |
+| **Corrected question type** | *You fill this in — Rename only.* Choose from the dropdown. |
 
 **Question types:**
 
 | Type | Meaning |
 |------|---------|
-| Knowledge gap | The reporter doesn't understand how a process or program works |
-| Process confusion | The reporter doesn't understand how a decision is made or who has authority |
-| Skepticism | A challenge or critique framed as a question, often rooted in lived community experience |
-| Accountability | Something was promised or required and hasn't happened |
-| Continuity | A prior thread that hasn't been picked up again |
+| knowledge_gap | The reporter doesn't understand how something works |
+| process_confusion | The reporter doesn't understand how a decision is made or who has authority |
+| skepticism | A challenge or critique framed as a question, often rooted in community experience |
+| accountability | Something was promised or required and hasn't happened |
+| continuity | A prior thread that hasn't been picked up again |
 
-### Columns you fill in
+### Topic group
 
-Each agent-assigned field — sub-topic, topic, and question type — has a matching decision column with a dropdown (Accept / Reject / Rename) and a corrected-value column used only when the decision is Rename.
+| Column | What it contains |
+|--------|------------------|
+| **Topic** | Broad national Documenters taxonomy category (e.g., HOUSING, EDUCATION, TRANSPORTATION) |
+| **Topic decision** | *You fill this in — only if wrong.* Choose **Rename**, then enter the correct topic in Corrected topic. |
+| **Corrected topic** | *You fill this in — Rename only.* Choose from the dropdown. |
 
-| Column | When to fill it in |
-|--------|--------------------|
-| **Sub-topic decision** | Every row you review. Choose **Accept**, **Reject**, or **Rename** from the dropdown. |
-| **Corrected sub-topic** | Only when Sub-topic decision is **Rename**. The label you want — either an existing sub-topic to merge into, or a new name. |
-| **Topic decision** | Only if the topic assignment is wrong. Choose **Rename**, then enter the correct topic in Corrected topic. |
-| **Corrected topic** | Only when Topic decision is **Rename**. Choose from the dropdown (national Documenters taxonomy values). |
-| **Question type decision** | Only if the question type is wrong. Choose **Rename**, then enter the correct type in Corrected question type. |
-| **Corrected question type** | Only when Question type decision is **Rename**. Choose from the dropdown. |
-| **Notes** | Optional. Any context for editors or for the next run. |
+### Notes and triage
+
+| Column | What it contains |
+|--------|------------------|
+| **Notes** | *You fill this in — optional.* Any context for the next run. |
+| **Needs review** | "yes" if the system is uncertain — filter on this column to find priority rows |
+| **GDoc URL** | Link to the original meeting notes in Google Drive |
+| **Sub-topic description** | A one-sentence description of the sub-topic — reference only, at the far right |
+| **Retrieved similar themes** | Up to three existing sub-topics from the library most similar to this question |
 
 ---
 
@@ -137,7 +149,7 @@ If the Theme Library is empty (first run) or sparse (early runs), this column wi
 Your decisions don't take effect immediately — they're applied at the **start of the next run**.
 
 At the start of each run, the system:
-1. Reads the most recent theme-overview tab (the current state of the library)
+1. Reads the most recent themes tab (the current state of the library)
 2. Reads your Accept/Rename/Reject decisions from the classified notes tab
 3. Applies them: Accepts and Renames update the library; Rejects are discarded
 4. Processes the meeting notes included in the current run with the updated library
@@ -176,7 +188,7 @@ Runs are triggered via GitHub Actions — a button in the project repository. Th
 1. Access to the GitHub repository (ask your operator if you don't have it)
 2. To click **Run workflow** on the Actions tab
 
-One month of notes takes about 10 minutes. When it finishes, two new tabs will appear in the Google Sheet: a classified notes tab and a theme overview tab, both dated to the run day.
+One month of notes takes about 10 minutes. When it finishes, two new tabs will appear in the Google Sheet: a notes tab and a themes tab, both dated to the run day.
 
 **What to expect during the run:** The system is running silently. You'll see a progress indicator in GitHub Actions. If it fails, the operator will investigate. No partial results are written — either both tabs appear, or neither does.
 
@@ -192,5 +204,5 @@ One month of notes takes about 10 minutes. When it finishes, two new tabs will a
 | Rename / merge a sub-topic | Choose **Rename** in Sub-topic decision + correct label in Corrected sub-topic |
 | Correct the topic | Choose **Rename** in Topic decision + correct value in Corrected topic |
 | Correct the question type | Choose **Rename** in Question type decision + correct value in Corrected question type |
-| Check what sub-topics exist | Read the most recent theme-overview tab |
+| Check what sub-topics exist | Read the most recent themes tab |
 | Trigger a new run | GitHub Actions → Run workflow (or ask operator) |
