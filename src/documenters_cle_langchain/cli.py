@@ -157,21 +157,28 @@ def main(argv: list[str] | None = None) -> int:
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
         run_date = args.run_date or datetime.date.today().isoformat()
 
+        stage = os.environ.get("RUN_STAGE", "")
+        env = os.environ.get("LANGSMITH_ENV", "")
+        tags = [t for t in [env, stage] if t]
+
         graph = build_graph()
-        result = graph.invoke({
-            "manifest_docs": manifest,
-            "sheet_id": args.sheet_id,
-            "run_date": run_date,
-            "theme_library": [],
-            "prior_decisions": [],
-            "ingested_docs": [],
-            "skipped_docs": [],
-            "retrieval_context": [],
-            "candidates": [],
-            "classified_themes": [],
-            "needs_review": [],
-            "run_summary": {},
-        })
+        result = graph.invoke(
+            {
+                "manifest_docs": manifest,
+                "sheet_id": args.sheet_id,
+                "run_date": run_date,
+                "theme_library": [],
+                "prior_decisions": [],
+                "ingested_docs": [],
+                "skipped_docs": [],
+                "retrieval_context": [],
+                "candidates": [],
+                "classified_themes": [],
+                "needs_review": [],
+                "run_summary": {},
+            },
+            {"tags": tags} if tags else None,
+        )
 
         ingested = result.get("ingested_docs", [])
         skipped = result.get("skipped_docs", [])
