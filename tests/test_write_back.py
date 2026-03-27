@@ -124,14 +124,15 @@ def test_tab_name_run_name_spaces_become_hyphens():
     assert next_classified_notes_tab_name("2026-02-10", [], "mar 2026") == "notes-2026-02-10-mar-2026-001"
 
 
-def test_tab_name_run_name_scoped_version():
-    existing = ["notes-2026-02-10-bootstrap-001"]
+def test_tab_name_run_name_counter_is_date_scoped():
+    # Named and unnamed tabs on the same date share the counter.
+    existing = ["notes-2026-02-10-001"]
     assert next_classified_notes_tab_name("2026-02-10", existing, "bootstrap") == "notes-2026-02-10-bootstrap-002"
 
 
-def test_tab_name_run_name_does_not_count_unnamed():
-    existing = ["notes-2026-02-10-001"]
-    assert next_classified_notes_tab_name("2026-02-10", existing, "bootstrap") == "notes-2026-02-10-bootstrap-001"
+def test_tab_name_run_name_counts_all_same_date():
+    existing = ["notes-2026-02-10-001", "notes-2026-02-10-bootstrap-002"]
+    assert next_classified_notes_tab_name("2026-02-10", existing) == "notes-2026-02-10-003"
 
 
 # ---------------------------------------------------------------------------

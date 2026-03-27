@@ -222,14 +222,15 @@ def next_theme_tab_name(
 
     Format: ``themes-YYYY-MM-DD-NNN`` or ``themes-YYYY-MM-DD-{name}-NNN``.
 
-    Counts existing tabs matching the same date (and name, if given) prefix
-    and increments. First run of the day → 001, second → 002, etc.
-    Tab titles are truncated to 100 characters (Google Sheets limit).
+    The version counter is date-scoped: all tabs on the same date share the
+    same counter regardless of name. First run of the day → 001, second → 002,
+    etc. Tab titles are truncated to 100 characters (Google Sheets limit).
     """
     slug = run_name.strip().replace(" ", "-") if run_name.strip() else ""
-    prefix = f"{THEME_TAB_PREFIX}{run_date}-{slug}-" if slug else f"{THEME_TAB_PREFIX}{run_date}-"
-    n = sum(1 for t in existing_titles if t.startswith(prefix)) + 1
-    return f"{prefix}{n:03d}"[:100]
+    date_prefix = f"{THEME_TAB_PREFIX}{run_date}-"
+    n = sum(1 for t in existing_titles if t.startswith(date_prefix)) + 1
+    name = f"{date_prefix}{slug}-{n:03d}" if slug else f"{date_prefix}{n:03d}"
+    return name[:100]
 
 
 # ---------------------------------------------------------------------------
