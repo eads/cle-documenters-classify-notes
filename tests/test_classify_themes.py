@@ -28,23 +28,62 @@ from documenters_cle_langchain.theme_library import QuestionType, Topic
 
 
 class FakeMergeLLM:
+    """Fake merge LLM supporting bind_tools and with_structured_output.
+
+    classify_one calls these methods internally rather than invoking the LLM
+    directly, so both must be present. bind_tools returns a no-op raw LLM
+    that reports zero tool calls; with_structured_output returns the preset
+    _MergeSplitDecision response.
+    """
+
     def __init__(self, response: _MergeSplitDecision):
         self.response = response
-        self.calls: list[list[dict]] = []
+        self.calls: list[list] = []
 
-    def invoke(self, messages: list[dict]) -> _MergeSplitDecision:
-        self.calls.append(messages)
-        return self.response
+    def bind_tools(self, tools: list) -> "_FakeRawMergeLLM":
+        return _FakeRawMergeLLM()
+
+    def with_structured_output(self, schema: type) -> "_FakeStructuredMergeLLM":
+        return _FakeStructuredMergeLLM(self)
+
+
+class _FakeRawMergeLLM:
+    """Raw fake LLM returned by FakeMergeLLM.bind_tools — never produces tool calls."""
+
+    def invoke(self, messages: list) -> object:
+        from unittest.mock import MagicMock
+        msg = MagicMock()
+        msg.tool_calls = []
+        return msg
+
+
+class _FakeStructuredMergeLLM:
+    def __init__(self, parent: FakeMergeLLM):
+        self._parent = parent
+
+    def invoke(self, messages: list) -> _MergeSplitDecision:
+        self._parent.calls.append(messages)
+        return self._parent.response
 
 
 class FakeQTLLM:
+    """Fake question-type LLM supporting with_structured_output."""
+
     def __init__(self, response: _QuestionTypeAndTopic):
         self.response = response
-        self.calls: list[list[dict]] = []
+        self.calls: list[list] = []
 
-    def invoke(self, messages: list[dict]) -> _QuestionTypeAndTopic:
-        self.calls.append(messages)
-        return self.response
+    def with_structured_output(self, schema: type) -> "_FakeStructuredQTLLM":
+        return _FakeStructuredQTLLM(self)
+
+
+class _FakeStructuredQTLLM:
+    def __init__(self, parent: FakeQTLLM):
+        self._parent = parent
+
+    def invoke(self, messages: list) -> _QuestionTypeAndTopic:
+        self._parent.calls.append(messages)
+        return self._parent.response
 
 
 # ---------------------------------------------------------------------------
@@ -508,10 +547,17 @@ def test_needs_review_subset_only_flagged():
         def __init__(self):
             self._i = 0
 
-        def invoke(self, _):
-            r = responses[self._i]
-            self._i += 1
-            return r
+        def bind_tools(self, tools):
+            return _FakeRawMergeLLM()
+
+        def with_structured_output(self, schema):
+            outer = self
+            class _S:
+                def invoke(self_, msgs):
+                    r = responses[outer._i]
+                    outer._i += 1
+                    return r
+            return _S()
 
     candidates = [make_candidate(doc_id=f"d{i}") for i in range(3)]
     classified, needs_review = run_classify_themes(
@@ -548,3 +594,75 @@ def test_llm_called_twice_per_candidate():
     run_classify_themes(candidates, merge_llm, qt_llm, THRESHOLD)
     assert len(merge_llm.calls) == 2
     assert len(qt_llm.calls) == 2
+
+
+# ---------------------------------------------------------------------------
+# Tool binding
+# ---------------------------------------------------------------------------
+
+
+def test_classify_one_with_no_tools_uses_structured_output_path():
+    """tools=None → structured output is still called, result is correct."""
+    result = classify_one(
+        make_candidate(), FakeMergeLLM(DEFAULT_MERGE_RESPONSE), FakeQTLLM(DEFAULT_QT_RESPONSE), THRESHOLD
+    )
+    assert result.decision == DEFAULT_MERGE_RESPONSE.decision
+
+
+def test_classify_one_tools_bound_but_no_tool_call():
+    """When tools are bound but the LLM makes no tool calls, result is unchanged."""
+    from unittest.mock import MagicMock
+
+    class _FakeTool:
+        name = "search_theme_library"
+        def invoke(self, args):
+            return "Housing voucher delays — long waits (HOUSING)"
+
+    result = classify_one(
+        make_candidate(),
+        FakeMergeLLM(DEFAULT_MERGE_RESPONSE),
+        FakeQTLLM(DEFAULT_QT_RESPONSE),
+        THRESHOLD,
+        tools=[_FakeTool()],
+    )
+    assert result.decision == DEFAULT_MERGE_RESPONSE.decision
+    assert result.merge_confidence == DEFAULT_MERGE_RESPONSE.confidence
+
+
+def test_classify_one_tool_call_appends_tool_message_to_messages():
+    """When the raw LLM returns a tool call, the tool is invoked and messages are extended."""
+    from langchain_core.messages import ToolMessage
+
+    tool_result_text = "1. affordable housing vouchers — Housing voucher program (HOUSING)"
+
+    class _FakeTool:
+        name = "search_theme_library"
+        def invoke(self, args):
+            return tool_result_text
+
+    # Override bind_tools to return a raw LLM that DOES produce a tool call
+    class _MergeLLMWithToolCall(FakeMergeLLM):
+        def bind_tools(self, tools):
+            return _RawLLMWithToolCall()
+
+    class _RawLLMWithToolCall:
+        def invoke(self, messages):
+            msg = MagicMock()
+            msg.tool_calls = [{"name": "search_theme_library", "args": {"query": "housing"}, "id": "tc-1"}]
+            return msg
+
+    from unittest.mock import MagicMock
+
+    merge_llm = _MergeLLMWithToolCall(DEFAULT_MERGE_RESPONSE)
+    result = classify_one(
+        make_candidate(), merge_llm, FakeQTLLM(DEFAULT_QT_RESPONSE), THRESHOLD,
+        tools=[_FakeTool()],
+    )
+    # After tool call, the augmented messages are passed to with_structured_output
+    # The final call includes the tool result in the messages
+    assert len(merge_llm.calls) == 1
+    augmented_messages = merge_llm.calls[0]
+    # Should include the tool message
+    assert any(isinstance(m, ToolMessage) for m in augmented_messages)
+    tool_msgs = [m for m in augmented_messages if isinstance(m, ToolMessage)]
+    assert tool_result_text in tool_msgs[0].content
