@@ -35,6 +35,8 @@ Each run produces a new tab in the Google Sheet. There are two kinds of tabs:
 
 ### Quick orientation to the classified notes tab
 
+![Screenshot of the classified notes tab in Google Sheets](classification.png)
+
 Each row is one follow-up question from one meeting. The system has already filled in its best guess for what the question is about in the "Sub-topic" column. Your job is to look at the **Decision** column and decide: Accept, Reject, or Rename.
 
 A reporter with no prior context should be able to decide a row's  in under a minute. If a row takes longer than that, check the **Retrieved similar themes** column — it's there specifically to help you make borderline calls quickly.
