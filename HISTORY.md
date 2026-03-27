@@ -4,6 +4,34 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #61 — LangSmith eval dataset using real fixture notes
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-61-eval-dataset`
+
+**What was built:**
+
+`evals/eval_classify.py` — a LangSmith eval script with 11 question/expected-outcome pairs drawn from four real fixture notes (`fixture_land_bank.txt`, `fixture_public_safety.txt`, `fixture_single_question.txt`, `hard_case_note.txt`). Covers land bank governance, police surveillance accountability, health disparities, and housing code enforcement.
+
+Each example has permissive expected sets (e.g., `expected_topics: ["HOUSING", "DEVELOPMENT"]`) to account for reasonable model variance while still catching clearly wrong outputs. Two evaluators: `topic_match` and `question_type_match` (both exact-match within the acceptable set, scored 0/1).
+
+The script creates the LangSmith dataset idempotently on first run (reads existing dataset by name if it already exists, creates it otherwise). Uses `langsmith.evaluation.evaluate()` with `max_concurrency=2` to keep API costs manageable.
+
+Not in the normal pytest suite — run manually with:
+```
+uv run python evals/eval_classify.py
+```
+
+**Key decisions:**
+
+- **Cold-start conditions.** The eval passes `retrieved_context=[]` to each candidate — no Theme Library context. This tests the model's base classification ability without retrieval, making results more stable across runs and not dependent on library state.
+- **Permissive expected sets.** Several questions genuinely straddle two question types (e.g., accountability vs. skepticism for "why did this take two years"). Hard expected values would produce false failures. The permissive set still catches clearly wrong classifications.
+- **11 examples, not 8.** The housing committee fixture (hard case) has four distinct follow-up questions, all useful for testing the pipeline on different question types. More examples = more signal.
+- **Raw LLMs.** The eval calls `classify_one` with raw `ChatOpenAI` instances (not pre-wrapped with `with_structured_output`), matching the interface introduced in issue #60.
+
+---
+
 ## Issue #60 — Expose theme library search as a LangChain tool
 
 **Date:** 2026-03-26
