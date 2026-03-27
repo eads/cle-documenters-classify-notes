@@ -55,6 +55,7 @@ jobs:
           LANGSMITH_ENDPOINT: "https://api.smith.langchain.com"
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: ${{ secrets.LANGSMITH_PROJECT }}
+          RUN_STAGE: classification
         run: |
           uv run documenters-cle-langchain pipeline \
             --manifest /tmp/manifest.json \
