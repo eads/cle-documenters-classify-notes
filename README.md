@@ -22,6 +22,8 @@ flowchart TD
     SHEET -->|"next run:\ndecisions applied in load_library"| LL
 ```
 
+---
+
 ## How it works
 
 1. **fetch** — pull Google Docs from a Drive folder into a local manifest JSON
@@ -117,13 +119,16 @@ Key modules:
 
 | File | Purpose |
 |------|---------|
-| `graph.py` | LangGraph graph definition and node wiring |
-| `extract_candidates.py` | LLM extraction of candidate sub-topics |
-| `classify_themes.py` | LLM merge/split decision and question type assignment |
-| `theme_library.py` | ThemeRecord schema, Sheets persistence, vector store |
-| `feedback.py` | Derives updated Theme Library from prior decisions |
-| `write_back.py` | Classified notes tab construction and Sheets formatting |
-| `ingest.py` | Document parsing and section extraction |
+| `cli.py` | CLI entry points: `fetch`, `pipeline`, `dedup` commands |
+| `graph.py` | LangGraph graph definition, node wiring, `GraphConfig` |
+| `ingest.py` | Document parsing, section extraction, required-field gate |
+| `retrieve_context.py` | Theme Library vector store; per-question semantic retrieval |
+| `extract_candidates.py` | LLM extraction of candidate sub-topics from follow-up questions |
+| `classify_themes.py` | LLM merge/split decision, question type, and national topic assignment |
+| `theme_library.py` | `ThemeRecord` schema, Sheets read/write, vector store construction |
+| `feedback.py` | Applies Accept/Rename/Reject decisions to produce the updated Theme Library |
+| `write_back.py` | Classified notes tab layout, row construction, and Sheets formatting |
+| `text_extract.py` | Google Docs paragraph and hyperlink extraction to plain text |
 | `gdrive.py` | Google Drive / Docs API client |
 
 ---
