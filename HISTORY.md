@@ -4,6 +4,29 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #62 — README: Mermaid graph diagram and "What I'd improve" section
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-62-readme-diagram`
+
+**What was built:**
+
+Two additions to `README.md`:
+
+**`## Graph` section with Mermaid flowchart.** Added immediately after the repo description paragraph. Shows all seven LangGraph nodes (`load_library` → `ingest` → `retrieve_context` → `extract_candidates` → `classify_themes` → `human_review` → `write_back`) with brief per-node labels, plus the Google Sheet feedback loop (editors fill in decisions → next run reads them). Each node label includes what it does in two lines so the diagram is self-contained. The `SHEET` node uses a Mermaid cylinder shape `[()]` to distinguish the external store from the processing nodes.
+
+**`## What I'd improve with more time` section.** Four items: custom review frontend (Google Sheet works but purpose-built UI would be better — keyboard shortcuts, inline diff, batch actions); occurrence count accumulation bug (#59, suspected multi-run state not persisting correctly); cost optimization (GPT-5.4 for all nodes now; LangSmith traces will show which can drop to a cheaper model); venue/meeting body knowledge base (`venue_context` slot in `retrieve_context.py` is wired but empty).
+
+**`## Eval` section** with `uv run python evals/eval_classify.py` instructions and a note that results appear in LangSmith.
+
+**Key decisions:**
+
+- **Mermaid in README, not a PNG.** The issue asked for a diagram renderable in GitHub. A fenced Mermaid block renders natively in GitHub markdown without a build step. No PNG to keep in sync.
+- **"What I'd improve" as honest backlog framing.** The four items are real constraints and deferred decisions, not aspirational features. Each is referenced to existing code or an open issue so the rationale is traceable.
+
+---
+
 ## Issue #61 — LangSmith eval dataset using real fixture notes
 
 **Date:** 2026-03-26
