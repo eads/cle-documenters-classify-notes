@@ -121,7 +121,7 @@ def test_tab_name_prefix():
 # ---------------------------------------------------------------------------
 
 def test_column_count():
-    assert len(COLUMNS) == 17
+    assert len(COLUMNS) == 19
 
 
 def test_column_headers_match_spec():
@@ -131,17 +131,19 @@ def test_column_headers_match_spec():
         "Source question",
         "Topic",
         "Sub-topic",
-        "Sub-topic description",
         "Sub-topic confidence",
-        "Decision",
-        "Corrected sub-topic",
         "Question type",
-        "Proposed new question type",
-        "Question type override",
         "Question type confidence",
+        "Sub-topic decision",
+        "Corrected sub-topic",
+        "Topic decision",
+        "Corrected topic",
+        "Question type decision",
+        "Corrected question type",
         "Notes",
         "Needs review",
         "GDoc URL",
+        "Sub-topic description",
         "Retrieved similar themes",
     ]
 
@@ -298,8 +300,8 @@ def test_qt_confidence_rounds_to_two_decimal_places():
 def test_reporter_decision_columns_are_blank():
     rows = build_classified_notes_rows([make_classified_theme()], [make_ingested_doc()])
     row = rows[1]
-    for col in ["Decision", "Corrected sub-topic", "Question type override",
-                "Proposed new question type", "Notes"]:
+    for col in ["Sub-topic decision", "Corrected sub-topic", "Topic decision",
+                "Corrected topic", "Question type decision", "Corrected question type", "Notes"]:
         assert row[COLUMNS.index(col)] == "", f"column '{col}' should be blank"
 
 
