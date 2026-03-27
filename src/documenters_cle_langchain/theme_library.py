@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 # Taxonomy enums
 # ---------------------------------------------------------------------------
 
-THEME_TAB_PREFIX = "theme-overview-"
+THEME_TAB_PREFIX = "themes-"
 _SEP = " ||| "
 _MAX_PASSAGES = 3
 
@@ -213,18 +213,23 @@ def find_latest_theme_tab(tab_titles: list[str]) -> str | None:
     return max(theme_tabs)
 
 
-def next_theme_tab_name(run_date: str, existing_titles: list[str]) -> str:
+def next_theme_tab_name(
+    run_date: str,
+    existing_titles: list[str],
+    run_name: str = "",
+) -> str:
     """Return the next versioned tab name for a given run date.
 
-    Format: ``theme-overview-YYYY-MM-DD-NNN``.
+    Format: ``themes-YYYY-MM-DD-NNN`` or ``themes-YYYY-MM-DD-{name}-NNN``.
 
-    Counts existing tabs that match the ``theme-overview-{run_date}-``
-    prefix and increments. First run of the day → 001, second → 002, etc.
-    Tabs from other dates or with other prefixes are ignored.
+    Counts existing tabs matching the same date (and name, if given) prefix
+    and increments. First run of the day → 001, second → 002, etc.
+    Tab titles are truncated to 100 characters (Google Sheets limit).
     """
-    prefix = f"{THEME_TAB_PREFIX}{run_date}-"
+    slug = run_name.strip().replace(" ", "-") if run_name.strip() else ""
+    prefix = f"{THEME_TAB_PREFIX}{run_date}-{slug}-" if slug else f"{THEME_TAB_PREFIX}{run_date}-"
     n = sum(1 for t in existing_titles if t.startswith(prefix)) + 1
-    return f"{prefix}{n:03d}"
+    return f"{prefix}{n:03d}"[:100]
 
 
 # ---------------------------------------------------------------------------
@@ -300,23 +305,26 @@ def write_theme_library(
     sheets: Any,
     sheet_id: str,
     run_date: str,
+    run_name: str = "",
 ) -> str:
     """Write theme library records to a new versioned tab.
 
-    Creates a tab named ``theme-library-{run_date}``. Nothing is overwritten.
+    Creates a tab named ``themes-{run_date}-NNN`` or
+    ``themes-{run_date}-{run_name}-NNN``. Nothing is overwritten.
 
     Args:
         records: theme records to write.
         sheets: Google Sheets API client.
         sheet_id: the ID of the target spreadsheet.
         run_date: ISO date string (YYYY-MM-DD) used for the tab name.
+        run_name: optional human label (e.g. "bootstrap", "mar-2026").
 
     Returns:
         The tab name that was created.
     """
     metadata = sheets.spreadsheets().get(spreadsheetId=sheet_id).execute()
     existing_titles = [s["properties"]["title"] for s in metadata.get("sheets", [])]
-    tab = next_theme_tab_name(run_date, existing_titles)
+    tab = next_theme_tab_name(run_date, existing_titles, run_name)
 
     add_response = sheets.spreadsheets().batchUpdate(
         spreadsheetId=sheet_id,
