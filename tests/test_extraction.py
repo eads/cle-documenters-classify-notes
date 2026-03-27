@@ -178,3 +178,17 @@ def test_unparseable_date_is_none():
 def test_doc_id_preserved():
     result = _extract(FULL_DOC, doc_id="abc-123")
     assert result.doc_id == "abc-123"
+
+
+def test_agency_link_stripped():
+    doc = FULL_DOC.replace(
+        "Agency: Cleveland City Council",
+        "Agency: Cleveland City Council (https://city.cleveland.gov/council)",
+    )
+    result = _extract(doc)
+    assert result.agency == "Cleveland City Council"
+
+
+def test_agency_without_link_unchanged():
+    result = _extract(FULL_DOC)
+    assert result.agency == "Cleveland City Council"

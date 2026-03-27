@@ -100,7 +100,7 @@ def extract(doc_id: str, text: str) -> ExtractedMeeting:
     # -----------------------------------------------------------------------
     # Pass 2: assemble and score
     # -----------------------------------------------------------------------
-    agency = meta.get("agency", "")
+    agency = re.sub(r"\s*\(https?://[^)]+\)", "", meta.get("agency", "")).strip()
     date_raw = meta.get("date", "")
     date = _parse_date(date_raw)
     documenter_name = meta.get("documenter_name", "")
