@@ -37,9 +37,9 @@ Each run produces a new tab in the Google Sheet. There are two kinds of tabs:
 
 ![Screenshot of the classified notes tab in Google Sheets](classification.png)
 
-Each row is one follow-up question from one meeting. The system has already filled in its best guess for what the question is about in the "Sub-topic" column. Your job is to look at the **Decision** column and decide: Accept, Reject, or Rename.
+Each row is one follow-up question from one meeting. The system has already filled in its best guesses for sub-topic, topic, and question type. Your job is to look at the **Sub-topic decision** column and decide: Accept, Reject, or Rename.
 
-A reporter with no prior context should be able to decide a row's  in under a minute. If a row takes longer than that, check the **Retrieved similar themes** column — it's there specifically to help you make borderline calls quickly.
+A reporter with no prior context should be able to decide a row in under a minute. If a row takes longer than that, check the **Retrieved similar themes** column — it's there specifically to help you make borderline calls quickly.
 
 ---
 
@@ -53,14 +53,14 @@ A reporter with no prior context should be able to decide a row's  in under a mi
 | **Meeting body** | Which public body held the meeting (e.g., "Cleveland City Council") |
 | **Source question** | The follow-up question exactly as the reporter wrote it |
 | **Topic** | Broad category from the national Documenters taxonomy (e.g., HOUSING, EDUCATION, TRANSPORTATION) |
-| **Sub-topic** | The specific civic issue the question is about — this is the system's core classification |
-| **Sub-topic description** | A one-sentence description of what this sub-topic covers |
+| **Sub-topic** | The specific civic issue the question is about — the system's core classification |
 | **Sub-topic confidence** | How confident the system is in its sub-topic classification (0–1). Rows below 0.7 are flagged for review. |
 | **Question type** | What kind of question it is (see below) |
 | **Question type confidence** | How confident the system is in the question type (0–1) |
 | **Needs review** | "yes" if the system is uncertain and wants your input. Use this to filter for priority rows. |
 | **GDoc URL** | Link to the source Google Doc (the original meeting notes) |
-| **Retrieved similar themes** | Existing themes from the library that are most similar to this question — the evidence behind the proposed sub-topic |
+| **Sub-topic description** | A one-sentence description of what this sub-topic covers — reference only, scroll right to see it |
+| **Retrieved similar themes** | Existing sub-topics from the library most similar to this question — the evidence behind the proposed classification |
 
 **Question types:**
 
@@ -74,23 +74,29 @@ A reporter with no prior context should be able to decide a row's  in under a mi
 
 ### Columns you fill in
 
+Each agent-assigned field — sub-topic, topic, and question type — has a matching decision column with a dropdown (Accept / Reject / Rename) and a corrected-value column used only when the decision is Rename.
+
 | Column | When to fill it in |
 |--------|--------------------|
-| **Decision** | Every row you review. Enter **Accept**, **Reject**, or **Rename**. (Case doesn't matter.) |
-| **Corrected sub-topic** | Only when Decision is **Rename**. Enter the label you want — either the name of an existing sub-topic to merge into, or a new name you prefer. |
-| **Question type override** | Only if the question type assignment is wrong. Choose from the dropdown. |
-| **Proposed new question type** | Only if no existing question type fits and you want to suggest a new one. Free text. |
+| **Sub-topic decision** | Every row you review. Choose **Accept**, **Reject**, or **Rename** from the dropdown. |
+| **Corrected sub-topic** | Only when Sub-topic decision is **Rename**. The label you want — either an existing sub-topic to merge into, or a new name. |
+| **Topic decision** | Only if the topic assignment is wrong. Choose **Rename**, then enter the correct topic in Corrected topic. |
+| **Corrected topic** | Only when Topic decision is **Rename**. Choose from the dropdown (national Documenters taxonomy values). |
+| **Question type decision** | Only if the question type is wrong. Choose **Rename**, then enter the correct type in Corrected question type. |
+| **Corrected question type** | Only when Question type decision is **Rename**. Choose from the dropdown. |
 | **Notes** | Optional. Any context for editors or for the next run. |
 
 ---
 
-## How to fill in a Decision row
+## How to fill in a decision row
+
+The Sub-topic decision column is the primary decision. Topic and question type decisions are optional corrections — only fill them in if you disagree with the system's assignment.
 
 ### Accept
 
 The system's proposed sub-topic is correct. No further action needed.
 
-**When to Accept:** The sub-topic label is accurate and useful as a recurring theme name. The description makes sense. You'd recognize this label in a summary report.
+**When to Accept:** The sub-topic label is accurate and useful as a recurring theme name. You'd recognize this label in a summary report.
 
 ### Reject
 
@@ -117,7 +123,7 @@ The proposed sub-topic is close but not quite right — either the label needs i
 
 This column shows up to three existing themes from the library that are most similar to the question being reviewed. For each retrieved theme, you'll see the theme name, its description, and its topic category.
 
-This column is most important for **Rename decisions**. Before creating a new theme or choosing a new label, check what's already in the library. If a retrieved theme is a good match, use its exact label as the Corrected sub-topic.
+This column is most important for **Rename decisions**. Before creating a new sub-topic or choosing a new label, check what's already in the library. If a retrieved sub-topic is a good match, use its exact label as the Corrected sub-topic.
 
 If the Theme Library is empty (first run) or sparse (early runs), this column will often be blank. That's expected — it fills in as you approve more themes over successive runs.
 
@@ -178,9 +184,10 @@ One month of notes takes about 10 minutes. When it finishes, two new tabs will a
 | Task | How |
 |------|-----|
 | Find rows that need review | Filter **Needs review** column for "yes" |
-| Accept a classification | Enter **Accept** in Decision |
-| Reject a classification | Enter **Reject** in Decision |
-| Rename / merge a theme | Enter **Rename** in Decision + correct label in Corrected sub-topic |
-| Override question type | Choose from Question type override dropdown |
+| Accept a sub-topic | Choose **Accept** in Sub-topic decision |
+| Reject a sub-topic | Choose **Reject** in Sub-topic decision |
+| Rename / merge a sub-topic | Choose **Rename** in Sub-topic decision + correct label in Corrected sub-topic |
+| Correct the topic | Choose **Rename** in Topic decision + correct value in Corrected topic |
+| Correct the question type | Choose **Rename** in Question type decision + correct value in Corrected question type |
 | Check what sub-topics exist | Read the most recent theme-overview tab |
 | Trigger a new run | GitHub Actions → Run workflow (or ask operator) |

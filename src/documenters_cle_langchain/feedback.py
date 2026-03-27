@@ -52,16 +52,23 @@ class ReviewDecision(TypedDict):
     Contains the agent-assigned fields needed for library derivation, plus
     the reporter-filled decision columns. Blank strings mean no value was
     entered.
+
+    Each agent-assigned field has a corresponding decision column (Accept /
+    Reject / Rename) and a corrected-value column used when the decision is
+    Rename. All three pairs follow the same pattern.
     """
 
-    source_question: str        # verbatim follow-up question (for representative passage)
-    sub_topic: str              # agent's proposed sub-topic label
-    description: str            # agent's sub-topic description (seeds ThemeRecord on creation)
-    topic: str                  # agent's proposed national topic
-    question_type: str          # agent's assigned question type
-    decision: str               # "Accept", "Rename", "Reject", or "" (blank = no action)
-    corrected_sub_topic: str    # reporter's corrected label (Rename only)
-    question_type_override: str  # reporter's question type correction (or "")
+    source_question: str           # verbatim follow-up question (for representative passage)
+    sub_topic: str                 # agent's proposed sub-topic label
+    description: str               # agent's sub-topic description (seeds ThemeRecord on creation)
+    topic: str                     # agent's proposed national topic
+    question_type: str             # agent's assigned question type
+    sub_topic_decision: str        # "Accept", "Rename", "Reject", or "" (blank = no action)
+    corrected_sub_topic: str       # reporter's corrected label (Rename only)
+    topic_decision: str            # "Accept", "Rename", "Reject", or ""
+    corrected_topic: str           # reporter's corrected topic (Rename only)
+    question_type_decision: str    # "Accept", "Rename", "Reject", or ""
+    corrected_question_type: str   # reporter's corrected question type (Rename only)
 
 
 # ---------------------------------------------------------------------------
@@ -137,9 +144,12 @@ def read_classified_notes_decisions(sheets: Any, sheet_id: str) -> list[ReviewDe
                 description=get(row, "Sub-topic description"),
                 topic=get(row, "Topic"),
                 question_type=get(row, "Question type"),
-                decision=get(row, "Decision"),
+                sub_topic_decision=get(row, "Sub-topic decision"),
                 corrected_sub_topic=get(row, "Corrected sub-topic"),
-                question_type_override=get(row, "Question type override"),
+                topic_decision=get(row, "Topic decision"),
+                corrected_topic=get(row, "Corrected topic"),
+                question_type_decision=get(row, "Question type decision"),
+                corrected_question_type=get(row, "Corrected question type"),
             )
         )
 
@@ -182,14 +192,13 @@ def apply_decisions(
     library: dict[str, ThemeRecord] = {r.sub_topic: r for r in base_library}
 
     for dec in decisions:
-        decision = dec["decision"].strip().title()
+        decision = dec["sub_topic_decision"].strip().title()
 
         if not decision or decision == DECISION_REJECT:
             continue
 
         if decision == DECISION_ACCEPT:
             target_label = dec["sub_topic"]
-            topic_str = dec["topic"]
         elif decision == DECISION_RENAME:
             target_label = dec["corrected_sub_topic"].strip()
             if not target_label:
@@ -198,7 +207,6 @@ def apply_decisions(
                     dec["sub_topic"],
                 )
                 continue
-            topic_str = dec["topic"]
         else:
             log.warning(
                 "feedback: unknown decision '%s' for '%s' — skipping",
@@ -207,7 +215,12 @@ def apply_decisions(
             )
             continue
 
-        # Parse the topic for this decision row.
+        # Resolve topic: use corrected_topic if editor chose Rename, else agent's.
+        topic_str = (
+            dec["corrected_topic"].strip()
+            if dec["topic_decision"].strip().title() == DECISION_RENAME and dec["corrected_topic"].strip()
+            else dec["topic"]
+        )
         try:
             topic = Topic(topic_str)
         except ValueError:
@@ -235,7 +248,12 @@ def apply_decisions(
         record.add_passage(dec["source_question"])
 
         # Increment the appropriate question type count.
-        effective_qt = dec["question_type_override"] or dec["question_type"]
+        # Use corrected_question_type if editor chose Rename, else agent's.
+        effective_qt = (
+            dec["corrected_question_type"].strip()
+            if dec["question_type_decision"].strip().title() == DECISION_RENAME and dec["corrected_question_type"].strip()
+            else dec["question_type"]
+        )
         count_field = _QT_COUNT_FIELD.get(effective_qt.strip())
         if count_field:
             setattr(record, count_field, getattr(record, count_field) + 1)

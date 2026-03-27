@@ -31,7 +31,7 @@ from typing import Any
 
 from .classify_themes import ClassifiedTheme
 from .ingest import IngestedDoc
-from .theme_library import ThemeRecord
+from .theme_library import QuestionType, ThemeRecord, Topic
 
 log = logging.getLogger(__name__)
 
@@ -45,19 +45,21 @@ COLUMNS = [
     "Source question",
     "Topic",
     "Sub-topic",
-    "Sub-topic description",
     "Sub-topic confidence",
-    # --- reporter decision columns (blank on write) ---
-    "Decision",
-    "Corrected sub-topic",
     "Question type",
-    "Proposed new question type",
-    "Question type override",
     "Question type confidence",
+    # --- reporter decision columns (blank on write) ---
+    "Sub-topic decision",
+    "Corrected sub-topic",
+    "Topic decision",
+    "Corrected topic",
+    "Question type decision",
+    "Corrected question type",
     "Notes",
-    # --- triage / reference ---
+    # --- triage / reference (read-only context) ---
     "Needs review",
     "GDoc URL",
+    "Sub-topic description",
     "Retrieved similar themes",
 ]
 
@@ -68,17 +70,19 @@ _COLUMN_WIDTHS = [
     300,  # Source question
     130,  # Topic
     150,  # Sub-topic
-    200,  # Sub-topic description
     80,   # Sub-topic confidence
-    150,  # Decision
-    150,  # Corrected sub-topic
     150,  # Question type
-    120,  # Proposed new question type
-    150,  # Question type override
     80,   # Question type confidence
+    120,  # Sub-topic decision
+    150,  # Corrected sub-topic
+    100,  # Topic decision
+    130,  # Corrected topic
+    100,  # Question type decision
+    150,  # Corrected question type
     120,  # Notes
     80,   # Needs review
     120,  # GDoc URL
+    200,  # Sub-topic description
     400,  # Retrieved similar themes
 ]
 
@@ -89,6 +93,18 @@ _WRAP_COLUMNS = [
     COLUMNS.index("Sub-topic description"),
     COLUMNS.index("Retrieved similar themes"),
 ]
+
+# Dropdown validation for decision columns and constrained correction columns.
+# Values are shown as chips in Sheets. strict=False so editors aren't blocked
+# from entering free text (e.g. a note) if needed.
+_DECISION_VALUES = ["Accept", "Reject", "Rename"]
+_DROPDOWN_COLUMNS: dict[str, list[str]] = {
+    "Sub-topic decision": _DECISION_VALUES,
+    "Topic decision": _DECISION_VALUES,
+    "Question type decision": _DECISION_VALUES,
+    "Corrected topic": [t.value for t in Topic],
+    "Corrected question type": [qt.value for qt in QuestionType],
+}
 
 
 def next_classified_notes_tab_name(run_date: str, existing_titles: list[str]) -> str:
@@ -161,17 +177,19 @@ def build_classified_notes_rows(
             theme.source_question,                          # Source question
             theme.topic,                                    # Topic
             theme.sub_topic,                                # Sub-topic
-            theme.description or "",                        # Sub-topic description
             round(theme.merge_confidence, 2),               # Sub-topic confidence
-            "",                                             # Decision
-            "",                                             # Corrected sub-topic
             theme.question_type or "",                      # Question type
-            "",                                             # Proposed new question type
-            "",                                             # Question type override
             round(theme.question_type_confidence, 2),       # Question type confidence
+            "",                                             # Sub-topic decision
+            "",                                             # Corrected sub-topic
+            "",                                             # Topic decision
+            "",                                             # Corrected topic
+            "",                                             # Question type decision
+            "",                                             # Corrected question type
             "",                                             # Notes
             "yes" if theme.needs_review else "",            # Needs review
             gdoc_url,                                       # GDoc URL
+            theme.description or "",                        # Sub-topic description
             _format_retrieved_context(theme.retrieved_context),  # Retrieved similar themes
         ])
 
@@ -189,12 +207,13 @@ def format_tab(
     tab_sheet_id: int,
     column_widths: list[int],
     wrap_columns: list[int],
+    dropdown_columns: dict[int, list[str]] | None = None,
 ) -> None:
     """Apply formatting to a newly created tab in a single batchUpdate call.
 
-    Applies frozen header row, bold header row, per-column pixel widths, and
-    text-wrap on specified columns.  All formatting is batched into a single
-    API call to minimise latency.
+    Applies frozen header row, bold header row, per-column pixel widths,
+    text-wrap on specified columns, and optional dropdown validation on
+    decision columns. All formatting is batched into a single API call.
 
     Args:
         sheets: Google Sheets API client.
@@ -202,6 +221,9 @@ def format_tab(
         tab_sheet_id: integer sheetId of the new tab (from addSheet response).
         column_widths: pixel width for each column, in order.
         wrap_columns: zero-based column indices that should wrap text.
+        dropdown_columns: mapping of zero-based column index → list of valid
+            values. Renders as a dropdown chip in Sheets. strict=False so
+            editors can still enter free text if needed.
     """
     requests: list[dict] = []
 
@@ -251,6 +273,27 @@ def format_tab(
                 },
                 "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP"}},
                 "fields": "userEnteredFormat.wrapStrategy",
+            }
+        })
+
+    # Dropdown validation on decision / correction columns (data rows only).
+    for col_idx, values in (dropdown_columns or {}).items():
+        requests.append({
+            "setDataValidation": {
+                "range": {
+                    "sheetId": tab_sheet_id,
+                    "startRowIndex": 1,
+                    "startColumnIndex": col_idx,
+                    "endColumnIndex": col_idx + 1,
+                },
+                "rule": {
+                    "condition": {
+                        "type": "ONE_OF_LIST",
+                        "values": [{"userEnteredValue": v} for v in values],
+                    },
+                    "showCustomUi": True,
+                    "strict": False,
+                },
             }
         })
 
@@ -339,7 +382,8 @@ def write_classified_notes(
         body={"values": rows},
     ).execute()
 
-    format_tab(sheets, sheet_id, tab_sheet_id, _COLUMN_WIDTHS, _WRAP_COLUMNS)
+    dropdown_cols = {COLUMNS.index(col): vals for col, vals in _DROPDOWN_COLUMNS.items()}
+    format_tab(sheets, sheet_id, tab_sheet_id, _COLUMN_WIDTHS, _WRAP_COLUMNS, dropdown_cols)
 
     data_rows = len(rows) - 1
     log.info(
