@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from typing import Any, TypedDict
 
+from langchain_core.tools import tool
 from langchain_core.vectorstores import InMemoryVectorStore
 
 from .ingest import IngestedDoc
@@ -143,6 +144,50 @@ def retrieve_for_question(
         [f"{s['similarity_score']:.3f}" for s in similar],
     )
     return similar
+
+
+# ---------------------------------------------------------------------------
+# LangChain tool — on-demand retrieval for the classify_themes node
+# ---------------------------------------------------------------------------
+
+
+def make_theme_search_tool(store: InMemoryVectorStore | None, k: int = 3) -> Any:
+    """Return a LangChain @tool that searches the Theme Library by semantic query.
+
+    The tool wraps ``retrieve_for_question`` so the merge/split LLM can request
+    additional retrieval context on demand during classification — useful when
+    the pre-fetched context is thin or ambiguous.
+
+    Returns ``None`` when the store is ``None`` (cold start: no themes indexed),
+    so callers can skip binding the tool on the first run.
+
+    Args:
+        store: the InMemoryVectorStore built from the current Theme Library.
+        k: number of similar themes to return per query.
+    """
+    if store is None:
+        return None
+
+    @tool
+    def search_theme_library(query: str) -> str:
+        """Search the Theme Library for sub-topics semantically similar to the query.
+
+        Use this when the pre-fetched retrieved context is insufficient to decide
+        whether a candidate theme should merge with an existing one.  Returns up
+        to three similar themes with their descriptions and topic categories.
+
+        Args:
+            query: a short phrase or question describing the civic issue to look up.
+        """
+        results = retrieve_for_question(query, store, k=k)
+        if not results:
+            return "No similar themes found in the library."
+        lines = []
+        for i, t in enumerate(results, 1):
+            lines.append(f"{i}. {t['sub_topic']} — {t['description']} ({t['topic']})")
+        return "\n".join(lines)
+
+    return search_theme_library
 
 
 # ---------------------------------------------------------------------------

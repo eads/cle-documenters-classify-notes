@@ -4,6 +4,28 @@ Append-only log of work completed, decisions made, and things deferred. One entr
 
 ---
 
+## Issue #60 — Expose theme library search as a LangChain tool
+
+**Date:** 2026-03-26
+
+**Branch:** `issue-60-theme-search-tool`
+
+**What was built:**
+
+A `search_theme_library` LangChain `@tool` exposed via `make_theme_search_tool(store, k)` in `retrieve_context.py`. The tool wraps `retrieve_for_question` and returns a formatted string of the top-k similar themes. Returns `None` on cold start (no store) so callers can skip binding.
+
+`classify_one` in `classify_themes.py` now accepts an optional `tools` list. When present, it calls `merge_llm.bind_tools(tools)` for an initial raw pass — the model may invoke the tool to request additional retrieval context. If tool calls are returned, they are executed and results appended as `ToolMessage` entries. The structured output pass then operates on the potentially augmented messages. `classify_one` now takes a *raw* LLM and handles `bind_tools`/`with_structured_output` internally, since `with_structured_output` returns a `RunnableSequence` that doesn't support `bind_tools`.
+
+`graph.py`'s `_retrieve_context` closure now returns `vector_store` in its state update (previously the store was discarded). `_classify_themes` builds the tool from the stored store and passes it to `run_classify_themes`. Cold start: `store` is `None` → `make_theme_search_tool` returns `None` → tool list is empty → `classify_one` skips the tool-calling pass.
+
+`vector_store: Any | None` added to `GraphState`.
+
+**Tests:** `FakeMergeLLM` and `FakeQTLLM` updated to support `bind_tools` and `with_structured_output`. `SequentialMergeLLM` updated similarly. 5 new tests for `make_theme_search_tool`; 3 new tests for `classify_one` tool-binding path. 342 total pass.
+
+**Key decisions:** `classify_one` must hold a raw LLM reference (not a pre-wrapped structured output chain) because `bind_tools` is a method on `ChatOpenAI`, not on the `RunnableSequence` returned by `with_structured_output`. Pre-fetched context handles most cases — the tool is bound and available but the model only calls it when it judges the pre-fetched context insufficient.
+
+---
+
 ## Issue #19 — Client documentation: system diagram, plain-language explanation, sheet guide
 
 **Date:** 2026-03-26

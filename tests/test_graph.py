@@ -98,6 +98,7 @@ def test_graphstate_has_all_required_keys():
         "ingested_docs",
         "skipped_docs",
         "retrieval_context",
+        "vector_store",
         "candidates",
         "classified_themes",
         "needs_review",

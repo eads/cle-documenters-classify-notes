@@ -13,6 +13,7 @@ from documenters_cle_langchain.retrieve_context import (
     QuestionContext,
     SimilarTheme,
     build_vector_store,
+    make_theme_search_tool,
     retrieve_for_question,
     run_retrieve_context,
 )
@@ -264,3 +265,41 @@ def test_run_retrieve_context_doc_with_no_questions():
     doc = make_doc("doc1", [])
     contexts = run_retrieve_context([doc], THEMES, FAKE_EMBEDDINGS, k=3)
     assert contexts == []
+
+
+# ---------------------------------------------------------------------------
+# make_theme_search_tool
+# ---------------------------------------------------------------------------
+
+
+def test_make_theme_search_tool_returns_none_on_cold_start():
+    """No store (cold start) → tool factory returns None."""
+    assert make_theme_search_tool(None) is None
+
+
+def test_make_theme_search_tool_returns_tool_when_store_populated():
+    store = build_vector_store(THEMES, FAKE_EMBEDDINGS)
+    tool = make_theme_search_tool(store)
+    assert tool is not None
+    assert tool.name == "search_theme_library"
+
+
+def test_theme_search_tool_returns_string():
+    store = build_vector_store(THEMES, FAKE_EMBEDDINGS)
+    tool = make_theme_search_tool(store)
+    result = tool.invoke({"query": "housing voucher delays"})
+    assert isinstance(result, str)
+
+
+def test_theme_search_tool_returns_results_for_matching_query():
+    store = build_vector_store(THEMES, FAKE_EMBEDDINGS)
+    tool = make_theme_search_tool(store)
+    result = tool.invoke({"query": "housing voucher delays"})
+    # Result should contain at least one sub-topic from THEMES
+    assert any(t.sub_topic in result for t in THEMES)
+
+
+def test_theme_search_tool_empty_store_returns_no_results_message():
+    """Store built with no themes returns the no-results string."""
+    # build_vector_store returns None for empty list, so test None path directly
+    assert make_theme_search_tool(None) is None

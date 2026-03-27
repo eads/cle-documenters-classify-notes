@@ -80,6 +80,7 @@ class GraphState(TypedDict):
 
     # --- retrieve_context output ---
     retrieval_context: list[QuestionContext]  # per-question similar themes from library
+    vector_store: Any | None                  # InMemoryVectorStore built from theme_library; passed to classify_themes for tool binding
 
     # --- extract_candidates output ---
     candidates: list[ThemeCandidate]  # proposed sub-topics per question
@@ -250,9 +251,12 @@ def build_graph(config: GraphConfig | None = None) -> Any:
         """
         if state["theme_library"]:
             from langchain_openai import OpenAIEmbeddings
+            from .retrieve_context import build_vector_store
             embeddings = OpenAIEmbeddings(model=_embedding_model)
+            store = build_vector_store(state["theme_library"], embeddings)
         else:
             embeddings = None
+            store = None
 
         contexts = run_retrieve_context(
             state["ingested_docs"],
@@ -260,7 +264,7 @@ def build_graph(config: GraphConfig | None = None) -> Any:
             embeddings,
             _retrieval_k,
         )
-        return {"retrieval_context": contexts}
+        return {"retrieval_context": contexts, "vector_store": store}
 
     def _extract_candidates(state: GraphState) -> dict:
         """LLM: extract one ThemeCandidate per follow-up question.
@@ -294,20 +298,21 @@ def build_graph(config: GraphConfig | None = None) -> Any:
             return {"classified_themes": [], "needs_review": []}
 
         from langchain_openai import ChatOpenAI
-        from .classify_themes import (
-            _MergeSplitDecision,
-            _QuestionTypeAndTopic,
-            run_classify_themes,
-        )
+        from .classify_themes import run_classify_themes
+        from .retrieve_context import make_theme_search_tool
 
-        merge_llm = ChatOpenAI(model=_classify_model).with_structured_output(
-            _MergeSplitDecision
-        )
-        qt_llm = ChatOpenAI(model=_question_type_model).with_structured_output(
-            _QuestionTypeAndTopic
-        )
+        # Raw LLMs — classify_one calls bind_tools / with_structured_output internally
+        # so that tool binding and structured output can be composed correctly.
+        merge_llm = ChatOpenAI(model=_classify_model)
+        qt_llm = ChatOpenAI(model=_question_type_model)
+
+        # Build the theme search tool if a vector store is available.
+        # On cold start (no library) the tool is None and classify_one skips binding.
+        theme_tool = make_theme_search_tool(state.get("vector_store"), k=_retrieval_k)
+        tools = [theme_tool] if theme_tool is not None else None
+
         classified, needs_review = run_classify_themes(
-            state["candidates"], merge_llm, qt_llm, _review_threshold
+            state["candidates"], merge_llm, qt_llm, _review_threshold, tools=tools
         )
         return {"classified_themes": classified, "needs_review": needs_review}
 

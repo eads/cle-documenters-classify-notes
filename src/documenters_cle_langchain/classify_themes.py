@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Literal
 
+from langchain_core.messages import ToolMessage
 from pydantic import BaseModel
 
 from .extract_candidates import ThemeCandidate
@@ -226,22 +227,52 @@ def classify_one(
     merge_llm: Any,
     qt_llm: Any,
     review_threshold: float,
+    tools: list | None = None,
 ) -> ClassifiedTheme:
     """Run both inferences on a single candidate and return a ClassifiedTheme.
 
     Args:
         candidate: the ThemeCandidate to classify.
-        merge_llm: LLM bound to ``_MergeSplitDecision`` structured output.
-        qt_llm: LLM bound to ``_QuestionTypeAndTopic`` structured output.
+        merge_llm: raw LLM (not pre-bound to structured output).  ``classify_one``
+            calls ``bind_tools`` and ``with_structured_output`` internally so that
+            tool binding and structured output can be composed correctly.
+        qt_llm: raw LLM for question-type + topic inference.
         review_threshold: merge_confidence below this → needs_review=True.
+        tools: optional list of LangChain tools to bind to the merge LLM.
+            When provided the model may call them before the structured-output
+            pass.  The pre-fetched context handles most cases; tools give the
+            model on-demand retrieval when it needs more context.
     """
     # Inference 1: merge/split
-    merge_messages = build_merge_split_prompt(candidate)
-    merge_dec: _MergeSplitDecision = merge_llm.invoke(merge_messages)
+    # Optional tool-calling pass: bind tools and let the model request additional
+    # retrieval context if the pre-fetched context is thin or ambiguous.
+    merge_messages: list = list(build_merge_split_prompt(candidate))
+    if tools:
+        ai_msg = merge_llm.bind_tools(tools).invoke(merge_messages)
+        tool_calls = getattr(ai_msg, "tool_calls", None) or []
+        if tool_calls:
+            merge_messages.append(ai_msg)
+            for tc in tool_calls:
+                result = next(t for t in tools if t.name == tc["name"]).invoke(tc["args"])
+                merge_messages.append(
+                    ToolMessage(content=str(result), tool_call_id=tc["id"])
+                )
+            log.info(
+                "classify: tool calls for '%s': %s",
+                candidate.sub_topic,
+                [tc["name"] for tc in tool_calls],
+            )
 
-    # Inference 2: question type + topic
+    # Structured output pass — uses the (possibly tool-augmented) messages.
+    merge_dec: _MergeSplitDecision = merge_llm.with_structured_output(
+        _MergeSplitDecision
+    ).invoke(merge_messages)
+
+    # Inference 2: question type + topic (no tools — taxonomy is fixed)
     qt_messages = build_question_type_prompt(candidate)
-    qt_dec: _QuestionTypeAndTopic = qt_llm.invoke(qt_messages)
+    qt_dec: _QuestionTypeAndTopic = qt_llm.with_structured_output(
+        _QuestionTypeAndTopic
+    ).invoke(qt_messages)
 
     needs_review = merge_dec.confidence < review_threshold
 
@@ -292,6 +323,7 @@ def run_classify_themes(
     merge_llm: Any,
     qt_llm: Any,
     review_threshold: float,
+    tools: list | None = None,
 ) -> tuple[list[ClassifiedTheme], list[ClassifiedTheme]]:
     """Classify all candidates and split into full list and needs-review subset.
 
@@ -307,7 +339,7 @@ def run_classify_themes(
     """
     classified: list[ClassifiedTheme] = []
     for candidate in candidates:
-        classified.append(classify_one(candidate, merge_llm, qt_llm, review_threshold))
+        classified.append(classify_one(candidate, merge_llm, qt_llm, review_threshold, tools=tools))
 
     needs_review = [c for c in classified if c.needs_review]
 
