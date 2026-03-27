@@ -1,16 +1,16 @@
 # Signal Cleveland — Documenters Notes Agent: Editorial Guide
 
-This guide is for Signal Cleveland reporters and editors who use the Documenters Notes Agent. It covers what the system does, how to read the Google Sheet, how to fill in a decision row, and when to trigger a run. No technical background required. It covers what the system does, how to read the Google Sheet, how to fill in a decision row, and when to trigger a run. No technical background required.
+This guide is for Cleveland Documenters along with Signal Cleveland reporters and editors who use the Documenters Notes Agent. It covers what the system does, how to read the Google Sheet, how to fill in a decision row, and how to trigger a run. No technical background required. 
 
 ---
 
 ## What this system does
 
-Signal Cleveland Documenters attend hundreds of public meetings each year and file structured notes. At the end of each set of notes, reporters flag **follow-up questions** — things they didn't understand, wanted to investigate further, or noticed weren't being followed up on.
+Cleveland Documenters attend hundreds of public meetings each year and file structured notes. At the end of each set of notes, reporters flag **follow-up questions** — things they didn't understand, wanted to investigate further, or noticed weren't being followed up on.
 
-Individually, each question is a small signal. In aggregate, across many meetings over time, they map what Cleveland communities are confused about, skeptical of, and not getting answers on.
+Individually, each question is a small signal. In aggregate, across many meetings over time, they provide indirect but important signals about what Cleveland communities are confused about, skeptical of, and not getting answers on.
 
-This system reads those notes from Google Drive, identifies the civic issues each follow-up question is about, and builds a running record of recurring themes over time. The output lands in a Google Sheet where you review and confirm (or correct) what the system proposed.
+This system reads those notes from Google Drive, identifies the civic issues each follow-up question is about, and builds a running record of recurring themes over time. The output lands in a Google Sheet where you review and confirm (or correct) what the system proposed. Those corrections are then fed back into the system. 
 
 **What it is not:** This system doesn't replace editorial judgment. It surfaces patterns. You confirm, reject, and rename. The system learns from your decisions.
 
@@ -18,11 +18,11 @@ This system reads those notes from Google Drive, identifies the civic issues eac
 
 ## The Theme Library
 
-At the heart of the system is the **Theme Library** — a growing catalog of civic sub-topics that have appeared in Documenter notes. Examples: "lead pipe replacement funding," "magnet school enrollment caps," "transit service cuts on high-ridership routes."
+At the heart of the system is the **Theme Library** — a growing catalog of civic sub-topics that have appeared in Documenter notes. Examples: "lead pipe replacement funding," "magnet school enrollment caps," "transit service cuts."
 
 When the system processes new meeting notes, it checks the Theme Library first: *Is this question about something we're already tracking, or is this a new issue?* Over time, as the library grows, the system gets better at recognizing recurring themes and connecting new questions to existing ones.
 
-The Theme Library starts empty and grows through your decisions. Early runs will surface more new themes than later runs. After a few review cycles, most questions will connect to themes the library already knows about.
+The Theme Library starts empty and grows through your decisions. Early runs will surface more new themes than later runs. After a few review cycles, many questions will connect to themes the library already knows about.
 
 ---
 
@@ -31,13 +31,13 @@ The Theme Library starts empty and grows through your decisions. Early runs will
 Each run produces a new tab in the Google Sheet. There are two kinds of tabs:
 
 - **classified-notes-YYYY-MM-DD** — the working sheet for that run. One row per follow-up question. This is where you work.
-- **theme-overview-YYYY-MM-DD** — a read-only summary of the Theme Library after that run. You can read it to understand what themes exist, but don't edit it — the system regenerates it each run.
+- **theme-overview-YYYY-MM-DD** — a read-only summary of the Theme Library after that run. You can read it to understand what themes exist, but don't edit it — the system regenerates it each run. It's there for your reference.
 
 ### Quick orientation to the classified notes tab
 
-Each row is one follow-up question from one meeting. The system has already filled in its best guess for what the question is about. Your job is to look at the **Decision** column and decide: Accept, Reject, or Rename.
+Each row is one follow-up question from one meeting. The system has already filled in its best guess for what the question is about in the "Sub-topic" column. Your job is to look at the **Decision** column and decide: Accept, Reject, or Rename.
 
-A reporter with no prior context should be able to action a row in under a minute. If a row takes longer than that, check the **Retrieved similar themes** column — it's there specifically to help you make borderline calls quickly.
+A reporter with no prior context should be able to decide a row's  in under a minute. If a row takes longer than that, check the **Retrieved similar themes** column — it's there specifically to help you make borderline calls quickly.
 
 ---
 
@@ -75,7 +75,7 @@ A reporter with no prior context should be able to action a row in under a minut
 | Column | When to fill it in |
 |--------|--------------------|
 | **Decision** | Every row you review. Enter **Accept**, **Reject**, or **Rename**. (Case doesn't matter.) |
-| **Corrected sub-topic** | Only when Decision is **Rename**. Enter the label you want — either the name of an existing theme to merge into, or a new name you prefer. |
+| **Corrected sub-topic** | Only when Decision is **Rename**. Enter the label you want — either the name of an existing sub-topic to merge into, or a new name you prefer. |
 | **Question type override** | Only if the question type assignment is wrong. Choose from the dropdown. |
 | **Proposed new question type** | Only if no existing question type fits and you want to suggest a new one. Free text. |
 | **Notes** | Optional. Any context for editors or for the next run. |
@@ -88,7 +88,7 @@ A reporter with no prior context should be able to action a row in under a minut
 
 The system's proposed sub-topic is correct. No further action needed.
 
-**When to Accept:** The sub-topic label is accurate and specific enough to be useful as a recurring theme name. The description makes sense. You'd recognize this label in a summary report.
+**When to Accept:** The sub-topic label is accurate and useful as a recurring theme name. The description makes sense. You'd recognize this label in a summary report.
 
 ### Reject
 
@@ -104,10 +104,10 @@ The proposed sub-topic is close but not quite right — either the label needs i
 
 **When to Rename:**
 - The sub-topic is a duplicate of an existing theme with a different name → type the existing theme's exact label in **Corrected sub-topic** to merge them.
-- The sub-topic label is awkward or too narrow → type a better name in **Corrected sub-topic**.
-- The system proposed a new theme but you recognize it as a variant of something already tracked → Rename into the existing theme.
+- The sub-topic label is awkward, too narrow, or too broad → type a better name in **Corrected sub-topic**.
+- The system proposed a new theme but you recognize it as a variant of something already tracked → Rename into the existing sub-topic.
 
-**Why this matters:** Renaming into an existing theme is how you prevent the library from fragmenting into near-duplicates like "housing affordability" and "affordable housing." The Theme Library is only useful if similar things share the same label.
+**Why this matters:** Renaming into an existing sub-topic is how you prevent the library from fragmenting into near-duplicates like "housing affordability" and "affordable housing." The Theme Library is only useful if similar things share the same label.
 
 ---
 
@@ -129,7 +129,7 @@ At the start of each run, the system:
 1. Reads the most recent theme-overview tab (the current state of the library)
 2. Reads your Accept/Rename/Reject decisions from the classified notes tab
 3. Applies them: Accepts and Renames update the library; Rejects are discarded
-4. Processes new meeting notes with the updated library
+4. Processes the meeting notes included in the current run with the updated library
 
 This means **you don't need to finish reviewing before the next run starts** — whatever decisions are in the sheet get applied. Unreviewed rows are carried forward for the next run's context.
 
@@ -146,7 +146,7 @@ flowchart LR
     E --> B
 ```
 
-Each run, the library gets a little better. The system gets better at recognizing recurring themes. Borderline classifications become clearer. The proportion of rows flagged for review shrinks over time.
+Each run, if you fill in the decision columns, the library gets a little better at recognizing recurring themes. Borderline classifications become clearer. The proportion of rows flagged for review shrinks over time.
 
 ---
 
@@ -165,7 +165,7 @@ Runs are triggered via GitHub Actions — a button in the project repository. Th
 1. Access to the GitHub repository (ask your operator if you don't have it)
 2. To click **Run workflow** on the Actions tab
 
-The run typically takes 30–60 minutes. When it finishes, two new tabs will appear in the Google Sheet: a classified notes tab and a theme overview tab, both dated to the run day.
+One month of notes takes about 10 minutes. When it finishes, two new tabs will appear in the Google Sheet: a classified notes tab and a theme overview tab, both dated to the run day.
 
 **What to expect during the run:** The system is running silently. You'll see a progress indicator in GitHub Actions. If it fails, the operator will investigate. No partial results are written — either both tabs appear, or neither does.
 
@@ -180,5 +180,5 @@ The run typically takes 30–60 minutes. When it finishes, two new tabs will app
 | Reject a classification | Enter **Reject** in Decision |
 | Rename / merge a theme | Enter **Rename** in Decision + correct label in Corrected sub-topic |
 | Override question type | Choose from Question type override dropdown |
-| Check what themes exist | Read the most recent theme-overview tab |
+| Check what sub-topics exist | Read the most recent theme-overview tab |
 | Trigger a new run | GitHub Actions → Run workflow (or ask operator) |
