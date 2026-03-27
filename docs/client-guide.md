@@ -53,10 +53,13 @@ A reporter with no prior context should be able to decide a row in under a minut
 | **Meeting body** | Which public body held the meeting (e.g., "Cleveland City Council") |
 | **Source question** | The follow-up question exactly as the reporter wrote it |
 | **Topic** | Broad category from the national Documenters taxonomy (e.g., HOUSING, EDUCATION, TRANSPORTATION) |
+| **Topic decision / Corrected topic** | Your decision on the topic assignment (blank on write) |
 | **Sub-topic** | The specific civic issue the question is about — the system's core classification |
 | **Sub-topic confidence** | How confident the system is in its sub-topic classification (0–1). Rows below 0.7 are flagged for review. |
+| **Sub-topic decision / Corrected sub-topic** | Your decision on the sub-topic (blank on write) |
 | **Question type** | What kind of question it is (see below) |
 | **Question type confidence** | How confident the system is in the question type (0–1) |
+| **Question type decision / Corrected question type** | Your decision on the question type (blank on write) |
 | **Needs review** | "yes" if the system is uncertain and wants your input. Use this to filter for priority rows. |
 | **GDoc URL** | Link to the source Google Doc (the original meeting notes) |
 | **Sub-topic description** | A one-sentence description of what this sub-topic covers — reference only, scroll right to see it |

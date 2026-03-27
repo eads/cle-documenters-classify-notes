@@ -39,22 +39,25 @@ CLASSIFIED_NOTES_TAB_PREFIX = "notes-"
 
 # Ordered column headers exactly as written to the Sheets tab.
 COLUMNS = [
-    # --- agent-filled ---
+    # --- context ---
     "Meeting date",
     "Meeting body",
     "Source question",
+    # --- topic group ---
     "Topic",
-    "Sub-topic",
-    "Sub-topic confidence",
-    "Question type",
-    "Question type confidence",
-    # --- reporter decision columns (blank on write) ---
-    "Sub-topic decision",
-    "Corrected sub-topic",
     "Topic decision",
     "Corrected topic",
+    # --- sub-topic group ---
+    "Sub-topic",
+    "Sub-topic confidence",
+    "Sub-topic decision",
+    "Corrected sub-topic",
+    # --- question type group ---
+    "Question type",
+    "Question type confidence",
     "Question type decision",
     "Corrected question type",
+    # --- editorial notes ---
     "Notes",
     # --- triage / reference (read-only context) ---
     "Needs review",
@@ -69,14 +72,14 @@ _COLUMN_WIDTHS = [
     150,  # Meeting body
     300,  # Source question
     130,  # Topic
-    150,  # Sub-topic
-    80,   # Sub-topic confidence
-    150,  # Question type
-    80,   # Question type confidence
-    120,  # Sub-topic decision
-    150,  # Corrected sub-topic
     100,  # Topic decision
     130,  # Corrected topic
+    150,  # Sub-topic
+    80,   # Sub-topic confidence
+    120,  # Sub-topic decision
+    150,  # Corrected sub-topic
+    150,  # Question type
+    80,   # Question type confidence
     100,  # Question type decision
     150,  # Corrected question type
     120,  # Notes
@@ -182,14 +185,14 @@ def build_classified_notes_rows(
             meeting_body,                                   # Meeting body
             theme.source_question,                          # Source question
             theme.topic,                                    # Topic
-            theme.sub_topic,                                # Sub-topic
-            round(theme.merge_confidence, 2),               # Sub-topic confidence
-            theme.question_type or "",                      # Question type
-            round(theme.question_type_confidence, 2),       # Question type confidence
-            "",                                             # Sub-topic decision
-            "",                                             # Corrected sub-topic
             "",                                             # Topic decision
             "",                                             # Corrected topic
+            theme.sub_topic,                                # Sub-topic
+            round(theme.merge_confidence, 2),               # Sub-topic confidence
+            "",                                             # Sub-topic decision
+            "",                                             # Corrected sub-topic
+            theme.question_type or "",                      # Question type
+            round(theme.question_type_confidence, 2),       # Question type confidence
             "",                                             # Question type decision
             "",                                             # Corrected question type
             "",                                             # Notes
