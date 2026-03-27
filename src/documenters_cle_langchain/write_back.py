@@ -43,11 +43,7 @@ COLUMNS = [
     "Meeting date",
     "Meeting body",
     "Source question",
-    # --- topic group ---
-    "Topic",
-    "Topic decision",
-    "Corrected topic",
-    # --- sub-topic group ---
+    # --- sub-topic group (primary classification) ---
     "Sub-topic",
     "Sub-topic confidence",
     "Sub-topic decision",
@@ -57,6 +53,10 @@ COLUMNS = [
     "Question type confidence",
     "Question type decision",
     "Corrected question type",
+    # --- topic group (broad category, least often corrected) ---
+    "Topic",
+    "Topic decision",
+    "Corrected topic",
     # --- editorial notes ---
     "Notes",
     # --- triage / reference (read-only context) ---
@@ -71,9 +71,6 @@ _COLUMN_WIDTHS = [
     80,   # Meeting date
     150,  # Meeting body
     300,  # Source question
-    130,  # Topic
-    100,  # Topic decision
-    130,  # Corrected topic
     150,  # Sub-topic
     80,   # Sub-topic confidence
     120,  # Sub-topic decision
@@ -82,6 +79,9 @@ _COLUMN_WIDTHS = [
     80,   # Question type confidence
     100,  # Question type decision
     150,  # Corrected question type
+    130,  # Topic
+    100,  # Topic decision
+    130,  # Corrected topic
     120,  # Notes
     80,   # Needs review
     120,  # GDoc URL
@@ -184,9 +184,6 @@ def build_classified_notes_rows(
             meeting_date,                                   # Meeting date
             meeting_body,                                   # Meeting body
             theme.source_question,                          # Source question
-            theme.topic,                                    # Topic
-            "",                                             # Topic decision
-            "",                                             # Corrected topic
             theme.sub_topic,                                # Sub-topic
             round(theme.merge_confidence, 2),               # Sub-topic confidence
             "",                                             # Sub-topic decision
@@ -195,6 +192,9 @@ def build_classified_notes_rows(
             round(theme.question_type_confidence, 2),       # Question type confidence
             "",                                             # Question type decision
             "",                                             # Corrected question type
+            theme.topic,                                    # Topic
+            "",                                             # Topic decision
+            "",                                             # Corrected topic
             "",                                             # Notes
             "yes" if theme.needs_review else "",            # Needs review
             gdoc_url,                                       # GDoc URL
