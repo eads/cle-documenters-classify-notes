@@ -6,17 +6,29 @@ For the full system design, see `ARCHITECTURE.md`. For the editorial team's guid
 
 ---
 
-## How it works
+## Graph
 
+```mermaid
+flowchart TD
+    LL[load_library\nreads Theme Library + prior decisions\napplies Accept/Rename/Reject] --> IN
+    IN[ingest\nparses follow-up questions\nfrom each meeting note] --> RC
+    RC[retrieve_context\nbuilds vector store from library\nretrieves top-k similar themes per question] --> EC
+    EC[extract_candidates\nLLM — one ThemeCandidate\nper follow-up question] --> CT
+    CT[classify_themes\nLLM — merge vs. new\nquestion type + national topic\noptional search_theme_library tool] --> HR
+    HR[human_review\npartitions needs_review subset] --> WB
+    WB[write_back\nwrites classified-notes tab\nwrites theme-overview tab]
+
+    WB -->|"editors fill in\nAccept · Reject · Rename"| SHEET[(Google Sheet)]
+    SHEET -->|"next run:\ndecisions applied in load_library"| LL
 ```
-fetch → pipeline (ingest → retrieve → extract → classify → write)
-```
+
+## How it works
 
 1. **fetch** — pull Google Docs from a Drive folder into a local manifest JSON
 2. **ingest** — parse each doc: extract follow-up questions, summary, notes, single signal
 3. **retrieve** — query the Theme Library for similar past sub-topics (cold start: empty)
 4. **extract** — LLM identifies candidate sub-topics from the follow-up questions
-5. **classify** — LLM decides merge vs. new for each candidate; assigns question type
+5. **classify** — LLM decides merge vs. new; assigns question type and national topic; optionally calls `search_theme_library` tool for additional retrieval context
 6. **write** — appends two new tabs to the Google Sheet:
    - `classified-notes-YYYY-MM-DD` — one row per question, decision columns blank for editors
    - `theme-overview-YYYY-MM-DD` — materialized Theme Library cache for the next run
@@ -113,3 +125,27 @@ Key modules:
 | `write_back.py` | Classified notes tab construction and Sheets formatting |
 | `ingest.py` | Document parsing and section extraction |
 | `gdrive.py` | Google Drive / Docs API client |
+
+---
+
+## Eval
+
+```bash
+uv run python evals/eval_classify.py
+```
+
+Runs `classify_one` against 11 real fixture questions with known expected outputs. Requires `OPENAI_API_KEY` and `LANGSMITH_API_KEY`. Results appear in LangSmith.
+
+---
+
+## What I'd improve with more time
+
+The [open issue queue](https://github.com/eads/cle-documenters-classify-notes/issues) is the living backlog. The highest-priority items:
+
+**Custom review frontend.** The Google Sheet works and was the right choice for a first version — zero setup for the editorial team, familiar UX, no deployment. But a purpose-built review UI would be meaningfully better: keyboard shortcuts for Accept/Reject/Rename, inline diff view showing what changed from the prior run, batch actions, and a clearer display of retrieved similar themes. The Sheet's column layout is workable but it's not optimized for fast review at volume.
+
+**Occurrence count accumulation across runs (#59).** The current chain accumulates counts through the theme-overview → apply_decisions chain, but there's a suspected bug where the count only reflects the most recent reviewed run rather than all history. Needs a multi-run integration test to confirm the behavior and fix the chain if needed.
+
+**Cost optimization.** The system currently uses GPT-5.4 for all LLM calls during the bootstrapping phase. LangSmith traces will reveal which nodes actually need frontier-model quality and which can drop to a smaller model. The merge/split judgment is likely the last to downgrade; extraction and question-type classification are candidates for a mini model. This matters for scale — the client hopes to extend to ~31 Documenters chapters.
+
+**Venue/meeting body knowledge base.** The `venue_context` slot in `retrieve_context.py` is wired but empty. A knowledge base of meeting body mandates, histories, and recurring participants would improve topic assignment for domain-specific questions (e.g., distinguishing a land bank governance question from a general housing question).
