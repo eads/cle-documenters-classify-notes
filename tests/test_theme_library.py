@@ -193,36 +193,36 @@ def test_from_row_tolerates_missing_column():
 # ---------------------------------------------------------------------------
 
 def test_theme_tab_name_first_run():
-    assert next_theme_tab_name("2026-03-24", []) == "theme-overview-2026-03-24-001"
+    assert next_theme_tab_name("2026-03-24", []) == "themes-2026-03-24-001"
 
 
 def test_theme_tab_name_second_run():
-    existing = ["theme-overview-2026-03-24-001"]
-    assert next_theme_tab_name("2026-03-24", existing) == "theme-overview-2026-03-24-002"
+    existing = ["themes-2026-03-24-001"]
+    assert next_theme_tab_name("2026-03-24", existing) == "themes-2026-03-24-002"
 
 
 def test_theme_tab_name_ignores_other_dates():
-    existing = ["theme-overview-2026-03-23-001", "theme-overview-2026-03-23-002"]
-    assert next_theme_tab_name("2026-03-24", existing) == "theme-overview-2026-03-24-001"
+    existing = ["themes-2026-03-23-001", "themes-2026-03-23-002"]
+    assert next_theme_tab_name("2026-03-24", existing) == "themes-2026-03-24-001"
 
 
 def test_find_latest_tab_returns_most_recent():
     tabs = [
-        "theme-overview-2026-01-15-001",
+        "themes-2026-01-15-001",
         "Sheet1",
-        "theme-overview-2026-03-01-001",
-        "theme-overview-2025-12-10-001",
+        "themes-2026-03-01-001",
+        "themes-2025-12-10-001",
     ]
-    assert find_latest_theme_tab(tabs) == "theme-overview-2026-03-01-001"
+    assert find_latest_theme_tab(tabs) == "themes-2026-03-01-001"
 
 
 def test_find_latest_tab_returns_latest_within_same_day():
     tabs = [
-        "theme-overview-2026-03-01-001",
-        "theme-overview-2026-03-01-002",
-        "theme-overview-2026-03-01-003",
+        "themes-2026-03-01-001",
+        "themes-2026-03-01-002",
+        "themes-2026-03-01-003",
     ]
-    assert find_latest_theme_tab(tabs) == "theme-overview-2026-03-01-003"
+    assert find_latest_theme_tab(tabs) == "themes-2026-03-01-003"
 
 
 def test_find_latest_tab_cold_start():
@@ -236,8 +236,8 @@ def test_find_latest_tab_empty_list():
 
 
 def test_find_latest_tab_ignores_non_prefix_matches():
-    tabs = ["not-theme-overview-2026-01-01", "theme-overview-2026-02-01"]
-    assert find_latest_theme_tab(tabs) == "theme-overview-2026-02-01"
+    tabs = ["not-themes-2026-01-01", "themes-2026-02-01"]
+    assert find_latest_theme_tab(tabs) == "themes-2026-02-01"
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +265,7 @@ def test_read_theme_library_cold_start():
 
 def test_read_theme_library_empty_tab():
     """Tab exists but has no data rows → empty list."""
-    sheets = _mock_sheets(["theme-overview-2026-01-01"], [COLUMNS])
+    sheets = _mock_sheets(["themes-2026-01-01"], [COLUMNS])
     result = read_theme_library(sheets, "sheet-id")
     assert result == []
 
@@ -273,7 +273,7 @@ def test_read_theme_library_empty_tab():
 def test_read_theme_library_parses_records():
     r = _housing_record(occurrence_count=3)
     rows = [COLUMNS, r.to_row()]
-    sheets = _mock_sheets(["theme-overview-2026-01-01"], rows)
+    sheets = _mock_sheets(["themes-2026-01-01"], rows)
     result = read_theme_library(sheets, "sheet-id")
     assert len(result) == 1
     assert result[0].sub_topic == r.sub_topic
@@ -285,20 +285,20 @@ def test_read_theme_library_picks_latest_tab():
     r = _housing_record()
     rows = [COLUMNS, r.to_row()]
     sheets = _mock_sheets(
-        ["theme-overview-2026-01-01", "theme-overview-2026-03-15"],
+        ["themes-2026-01-01", "themes-2026-03-15"],
         rows,
     )
     read_theme_library(sheets, "sheet-id")
     # The values().get() call should reference the latest tab
     get_call_args = sheets.spreadsheets().values().get.call_args
-    assert "theme-overview-2026-03-15" in str(get_call_args)
+    assert "themes-2026-03-15" in str(get_call_args)
 
 
 def test_read_theme_library_skips_malformed_rows(caplog):
     """A row with an invalid Topic value is skipped with a warning."""
     bad_row = ["Sub", "Desc", "NOT_A_VALID_TOPIC", "0", "0", "0", "0", "0", "0", ""]
     rows = [COLUMNS, bad_row]
-    sheets = _mock_sheets(["theme-overview-2026-01-01"], rows)
+    sheets = _mock_sheets(["themes-2026-01-01"], rows)
     with caplog.at_level("WARNING"):
         result = read_theme_library(sheets, "sheet-id")
     assert result == []
@@ -329,13 +329,13 @@ def test_write_theme_library_creates_tab():
     sheets = _write_mock()
     records = [_housing_record()]
     tab = write_theme_library(records, sheets, "sheet-id", "2026-03-24")
-    assert tab == "theme-overview-2026-03-24-001"
+    assert tab == "themes-2026-03-24-001"
 
 
 def test_write_theme_library_increments_on_same_day_rerun():
-    sheets = _write_mock(existing_tab_titles=["theme-overview-2026-03-24-001"])
+    sheets = _write_mock(existing_tab_titles=["themes-2026-03-24-001"])
     tab = write_theme_library([], sheets, "sheet-id", "2026-03-24")
-    assert tab == "theme-overview-2026-03-24-002"
+    assert tab == "themes-2026-03-24-002"
 
 
 def test_write_theme_library_writes_header_and_data():

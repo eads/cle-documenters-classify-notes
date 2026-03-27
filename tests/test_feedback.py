@@ -64,18 +64,18 @@ def test_find_latest_no_classified_tabs():
 
 def test_find_latest_single_tab():
     assert find_latest_classified_notes_tab(
-        ["classified-notes-2026-02-10"]
-    ) == "classified-notes-2026-02-10"
+        ["notes-2026-02-10"]
+    ) == "notes-2026-02-10"
 
 
 def test_find_latest_picks_most_recent():
     tabs = [
-        "classified-notes-2026-01-15",
-        "classified-notes-2026-03-01",
-        "classified-notes-2026-02-10",
+        "notes-2026-01-15",
+        "notes-2026-03-01",
+        "notes-2026-02-10",
         "theme-overview-2026-03-01",
     ]
-    assert find_latest_classified_notes_tab(tabs) == "classified-notes-2026-03-01"
+    assert find_latest_classified_notes_tab(tabs) == "notes-2026-03-01"
 
 
 def test_find_latest_empty_list():
@@ -84,19 +84,19 @@ def test_find_latest_empty_list():
 
 def test_find_latest_versioned_picks_highest_version():
     tabs = [
-        "classified-notes-2026-03-01-001",
-        "classified-notes-2026-03-01-002",
-        "classified-notes-2026-03-01-003",
+        "notes-2026-03-01-001",
+        "notes-2026-03-01-002",
+        "notes-2026-03-01-003",
     ]
-    assert find_latest_classified_notes_tab(tabs) == "classified-notes-2026-03-01-003"
+    assert find_latest_classified_notes_tab(tabs) == "notes-2026-03-01-003"
 
 
 def test_find_latest_versioned_later_date_beats_higher_version():
     tabs = [
-        "classified-notes-2026-03-01-003",
-        "classified-notes-2026-03-02-001",
+        "notes-2026-03-01-003",
+        "notes-2026-03-02-001",
     ]
-    assert find_latest_classified_notes_tab(tabs) == "classified-notes-2026-03-02-001"
+    assert find_latest_classified_notes_tab(tabs) == "notes-2026-03-02-001"
 
 
 # ---------------------------------------------------------------------------
@@ -467,7 +467,7 @@ def test_read_decisions_cold_start_no_tabs():
 
 def test_read_decisions_empty_tab():
     sheets = _make_sheets_mock(
-        ["classified-notes-2026-02-10"],
+        ["notes-2026-02-10"],
         [NOTES_COLUMNS],  # header only, no data rows
     )
     result = read_classified_notes_decisions(sheets, "sheet-id")
@@ -486,7 +486,7 @@ def test_read_decisions_parses_rows():
     data_row[NOTES_COLUMNS.index("Corrected question type")] = ""
 
     sheets = _make_sheets_mock(
-        ["classified-notes-2026-02-10"],
+        ["notes-2026-02-10"],
         [NOTES_COLUMNS, data_row],
     )
     result = read_classified_notes_decisions(sheets, "sheet-id")
@@ -502,20 +502,20 @@ def test_read_decisions_uses_most_recent_tab():
     data_row[NOTES_COLUMNS.index("Sub-topic decision")] = "Reject"
 
     sheets = _make_sheets_mock(
-        ["classified-notes-2026-01-01", "classified-notes-2026-03-25"],
+        ["notes-2026-01-01", "notes-2026-03-25"],
         [NOTES_COLUMNS, data_row],
     )
     result = read_classified_notes_decisions(sheets, "sheet-id")
     # Should read the most recent tab; verify the values() call used the right tab
     get_call = sheets.spreadsheets().values().get.call_args
-    assert "classified-notes-2026-03-25" in str(get_call)
+    assert "notes-2026-03-25" in str(get_call)
 
 
 def test_read_decisions_tolerates_short_rows():
     """Rows shorter than the header should not raise."""
     short_row = ["short"]  # far fewer columns than the header
     sheets = _make_sheets_mock(
-        ["classified-notes-2026-02-10"],
+        ["notes-2026-02-10"],
         [NOTES_COLUMNS, short_row],
     )
     result = read_classified_notes_decisions(sheets, "sheet-id")

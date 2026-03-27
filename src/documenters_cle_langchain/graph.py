@@ -69,6 +69,7 @@ class GraphState(TypedDict):
     manifest_docs: list[dict]       # raw docs from manifest JSON (one per meeting note)
     sheet_id: str | None            # Google Sheet ID for output tabs
     run_date: str                   # ISO date string (YYYY-MM-DD); used for tab naming
+    run_name: str                   # optional human label embedded in tab name (e.g. "bootstrap")
 
     # --- loaded from Sheets at run start by load_library node ---
     theme_library: list[Any]        # list[ThemeRecord] — confirmed themes from prior runs
@@ -176,12 +177,14 @@ def write_back(state: GraphState) -> dict:
     from .write_back import enrich_library_descriptions, write_classified_notes
 
     sheets = build_sheets_client()
+    run_name = state.get("run_name") or ""
     classified_tab = write_classified_notes(
         state["classified_themes"],
         state["ingested_docs"],
         sheets,
         sheet_id,
         state["run_date"],
+        run_name,
     )
 
     theme_library = state.get("theme_library") or []
@@ -205,6 +208,7 @@ def write_back(state: GraphState) -> dict:
         sheets,
         sheet_id,
         state["run_date"],
+        run_name,
     )
     return {
         "run_summary": {

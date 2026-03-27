@@ -35,7 +35,7 @@ from .theme_library import QuestionType, ThemeRecord, Topic
 
 log = logging.getLogger(__name__)
 
-CLASSIFIED_NOTES_TAB_PREFIX = "classified-notes-"
+CLASSIFIED_NOTES_TAB_PREFIX = "notes-"
 
 # Ordered column headers exactly as written to the Sheets tab.
 COLUMNS = [
@@ -107,18 +107,24 @@ _DROPDOWN_COLUMNS: dict[str, list[str]] = {
 }
 
 
-def next_classified_notes_tab_name(run_date: str, existing_titles: list[str]) -> str:
+def next_classified_notes_tab_name(
+    run_date: str,
+    existing_titles: list[str],
+    run_name: str = "",
+) -> str:
     """Return the next versioned tab name for a given run date.
 
-    Format: ``classified-notes-YYYY-MM-DD-NNN``.
+    Format: ``notes-YYYY-MM-DD-NNN`` or ``notes-YYYY-MM-DD-{name}-NNN``.
 
-    Counts existing tabs that match the ``classified-notes-{run_date}-``
-    prefix and increments. First run of the day → 001, second → 002, etc.
+    Counts existing tabs that match the same date (and name, if given) prefix
+    and increments. First run of the day → 001, second → 002, etc.
     Tabs from other dates or with other prefixes are ignored.
+    Tab titles are truncated to 100 characters (Google Sheets limit).
     """
-    prefix = f"{CLASSIFIED_NOTES_TAB_PREFIX}{run_date}-"
+    slug = run_name.strip().replace(" ", "-") if run_name.strip() else ""
+    prefix = f"{CLASSIFIED_NOTES_TAB_PREFIX}{run_date}-{slug}-" if slug else f"{CLASSIFIED_NOTES_TAB_PREFIX}{run_date}-"
     n = sum(1 for t in existing_titles if t.startswith(prefix)) + 1
-    return f"{prefix}{n:03d}"
+    return f"{prefix}{n:03d}"[:100]
 
 
 # ---------------------------------------------------------------------------
@@ -346,12 +352,13 @@ def write_classified_notes(
     sheets: Any,
     sheet_id: str,
     run_date: str,
+    run_name: str = "",
 ) -> str:
     """Write the classified notes tab for this run.
 
-    Creates a new tab named ``classified-notes-{run_date}``. Writes header row
-    plus one data row per classified theme. Nothing is overwritten — each run
-    gets its own tab.
+    Creates a new tab named ``notes-{run_date}-NNN`` or
+    ``notes-{run_date}-{run_name}-NNN``. Writes header row plus one data row
+    per classified theme. Nothing is overwritten — each run gets its own tab.
 
     Args:
         classified_themes: all ClassifiedTheme results from this run.
@@ -359,13 +366,14 @@ def write_classified_notes(
         sheets: Google Sheets API client (from ``build_sheets_client``).
         sheet_id: the ID of the target spreadsheet.
         run_date: ISO date string (YYYY-MM-DD) used for the tab name.
+        run_name: optional human label (e.g. "bootstrap", "mar-2026").
 
     Returns:
         The tab name that was created.
     """
     metadata = sheets.spreadsheets().get(spreadsheetId=sheet_id).execute()
     existing_titles = [s["properties"]["title"] for s in metadata.get("sheets", [])]
-    tab = next_classified_notes_tab_name(run_date, existing_titles)
+    tab = next_classified_notes_tab_name(run_date, existing_titles, run_name)
 
     add_response = sheets.spreadsheets().batchUpdate(
         spreadsheetId=sheet_id,

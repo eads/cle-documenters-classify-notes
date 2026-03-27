@@ -43,6 +43,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="ISO date (YYYY-MM-DD) used for output tab naming. Defaults to today.",
     )
+    pipeline.add_argument(
+        "--name",
+        default="",
+        help="Optional label embedded in the output tab names (e.g. 'bootstrap', 'mar-2026').",
+    )
 
     dedup = subparsers.add_parser(
         "dedup",
@@ -162,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
             "manifest_docs": manifest,
             "sheet_id": args.sheet_id,
             "run_date": run_date,
+            "run_name": args.name,
             "theme_library": [],
             "prior_decisions": [],
             "ingested_docs": [],
