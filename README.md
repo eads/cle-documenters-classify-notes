@@ -1,98 +1,115 @@
-# documenters-cle-langchain
+# Documenters Notes Agent
 
-Python + LangChain pipeline that fetches Cleveland public meeting notes from Google Drive, extracts structured metadata, and classifies each meeting across civic topic categories.
+A LangGraph pipeline that reads Cleveland Documenter meeting notes from Google Drive, extracts follow-up questions, classifies them by recurring civic sub-topic and question type, and writes results to a Google Sheet for editorial review. Each run builds on prior reviewer decisions — the Theme Library grows over time and improves classification quality.
 
-This is the basic "start here" doc for humans. This codebase has been written in part by Codex and Claude Code (current). `AGENTS.md` describes the current architecture and will evolve as the codebase does. `ARCHITECTURE.md` describes the target state. `HISTORY.md` tracks the evolution. `CLAUDE.md` is a prompt that seeds each session with some additional context and a "table of contents" to the other files.
+For the full system design, see `ARCHITECTURE.md`. For the editorial team's guide to the Google Sheet, see `docs/client-guide.md`. For repo conventions and current code structure, see `AGENTS.md`.
 
+---
 
-## Requirements & Setup
+## How it works
 
-**Prerequisites:**
-- Python 3.12
-- [`uv`](https://docs.astral.sh/uv/) (preferred environment manager)
+```
+fetch → pipeline (ingest → retrieve → extract → classify → write)
+```
+
+1. **fetch** — pull Google Docs from a Drive folder into a local manifest JSON
+2. **ingest** — parse each doc: extract follow-up questions, summary, notes, single signal
+3. **retrieve** — query the Theme Library for similar past sub-topics (cold start: empty)
+4. **extract** — LLM identifies candidate sub-topics from the follow-up questions
+5. **classify** — LLM decides merge vs. new for each candidate; assigns question type
+6. **write** — appends two new tabs to the Google Sheet:
+   - `classified-notes-YYYY-MM-DD` — one row per question, decision columns blank for editors
+   - `theme-overview-YYYY-MM-DD` — materialized Theme Library cache for the next run
+
+Editors fill in Accept / Reject / Rename decisions in the classified-notes tab. Those decisions are applied at the start of the next run to update the Theme Library.
+
+---
+
+## Requirements
+
+- Python 3.12+
+- [`uv`](https://docs.astral.sh/uv/)
 - OpenAI API key
-- Google service account credentials (for org-restricted Drive folders) or a Google API key (for public/shared folders)
+- Google service account credentials with Sheets + Drive access
+- An existing Google Sheet (the pipeline appends tabs; it does not create the spreadsheet)
 
-**Tooling:**
-- LangChain + `langchain-openai` for LLM orchestration
-- Pydantic for structured output schemas
-- `python-dotenv` for local config
+---
 
-**Install:**
+## Setup
 
 ```bash
 uv sync
 ```
 
-**Configure:**
-
-Copy `.env.example` to `.env` and fill in credentials:
+Copy `.env.example` to `.env` and fill in:
 
 ```
-OPENAI_API_KEY=...
-GOOGLE_API_KEY=...              # public/shared folders
-GOOGLE_APPLICATION_CREDENTIALS=...  # path to service account JSON (org-restricted folders)
-ROOT_DRIVE_FOLDER=...           # default folder ID for fetch
-CLASSIFIER_OUTPUT_SHEET=...     # existing Google Sheet ID to write classifier output tabs to
+OPENAI_API_KEY=sk-...
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+ROOT_DRIVE_FOLDER=<Drive folder ID>
+CLASSIFIER_OUTPUT_SHEET=<Google Sheet ID>
+
+# Optional
+GOOGLE_IMPERSONATE_USER=user@example.com   # domain-wide delegation
+LANGSMITH_TRACING=true                     # LangSmith tracing
+LANGSMITH_API_KEY=lsv2_...
+LANGSMITH_PROJECT=cle-documenters
 ```
 
-## Pipeline
+---
 
-```
-fetch → dedup → extract → gate → classify → JSON + CSV
-```
+## Running
 
-1. **fetch** — pull all Google Docs from a Drive folder into a local manifest JSON
-2. **dedup** — remove duplicates (checksum + name-containment; newest wins)
-3. **extract** — deterministic parse of metadata and sections (agency, date, summary, follow-up questions, notes, single signal)
-4. **gate** — drop docs missing any required field (agency, date, summary, notes)
-5. **classify** — two-pass LLM topic classifier:
-   - Initial pass: summary + follow-up questions + single signal → `gpt-5-mini`
-   - If any category score is ambiguous (0.3–0.7): re-run with full notes → `gpt-5.4`
-
-## Output
-
-**JSON** — full structured results including all extracted fields, topic scores, and classification metadata.
-
-**CSV** — one row per document: `web_url`, `name`, `date`, `agency`, `model_used`, and per-category columns for score, label (`certain` / `ambiguous` / `unlikely`), and identified topics.
-
-## Usage
-
-Run the full pipeline from fetch through classification:
-
-Note that for the moment, fetch must be run separately from the processing steps.
+### Step 1 — Fetch docs from Drive
 
 ```bash
-# Fetch docs from a Drive folder
 uv run documenters-cle-langchain fetch \
   --folder DRIVE_FOLDER_ID \
-  --out data/docs_2026.json \
+  --out data/manifest_2026.json \
   --year 2026
-
-# Run extract, gate, and classify on a manifest
-uv run documenters-cle-langchain pipeline \
-  --manifest data/docs_2026.json \
-  --out data/results_2026.json \
-  --csv-out data/results_2026.csv
 ```
 
-**Subcommands** — run individual steps independently:
+Fetches all docs from the folder, deduplicates, and writes a manifest JSON. Use `--month March` to narrow to a single month.
+
+### Step 2 — Run the pipeline
 
 ```bash
-# Dedup a manifest and write a review file
-uv run documenters-cle-langchain dedup \
-  --input data/docs_2026.json \
-  --review data/dedup_review.md
-
-# Upload an existing results JSON to a new tab in the output sheet (no pipeline re-run)
-uv run documenters-cle-langchain upload \
-  --results data/results_2026.json \
-  --sheet-id SHEET_ID \
-  --year 2026 --month March
+uv run documenters-cle-langchain pipeline \
+  --manifest data/manifest_2026.json \
+  --out data/run_summary.json \
+  --sheet-id YOUR_SHEET_ID
 ```
 
-## Topic Categories
+Reads the manifest, runs the full LangGraph pipeline, and writes two new tabs to the Sheet. `--sheet-id` defaults to the `CLASSIFIER_OUTPUT_SHEET` env var. `--run-date YYYY-MM-DD` overrides the tab date (defaults to today).
 
-Categories are configured in `classifiers.py` — add a new `(slug, label, description)` tuple to `CATEGORIES` and it will appear in both the classifier and the CSV output with no other changes.
+### Dedup only
 
-Current categories: **Civic Infrastructure**, **Schools & Education**.
+```bash
+uv run documenters-cle-langchain dedup \
+  --input data/manifest_2026.json \
+  --review data/dedup_review.md
+```
+
+Deduplicates a manifest in place and optionally writes a markdown review of dropped docs.
+
+---
+
+## Development
+
+```bash
+uv run pytest          # run all tests
+uv run pytest -x -q    # fail fast, quiet
+```
+
+Key modules:
+
+| File | Purpose |
+|------|---------|
+| `graph.py` | LangGraph graph definition and node wiring |
+| `extract_candidates.py` | LLM extraction of candidate sub-topics |
+| `classify_themes.py` | LLM merge/split decision and question type assignment |
+| `theme_library.py` | ThemeRecord schema, Sheets persistence, vector store |
+| `feedback.py` | Derives updated Theme Library from prior decisions |
+| `write_back.py` | Classified notes tab construction and Sheets formatting |
+| `ingest.py` | Document parsing and section extraction |
+| `gdrive.py` | Google Drive / Docs API client |
