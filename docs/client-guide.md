@@ -1,6 +1,6 @@
-# Signal Cleveland — Documenter Themes: Editorial Guide
+# Signal Cleveland — Documenters Notes Agent: Editorial Guide
 
-This guide is for Signal Cleveland reporters and editors who use the Documenter Themes system. It covers what the system does, how to read the Google Sheet, how to fill in a decision row, and when to trigger a run. No technical background required.
+This guide is for Signal Cleveland reporters and editors who use the Documenters Notes Agent. It covers what the system does, how to read the Google Sheet, how to fill in a decision row, and when to trigger a run. No technical background required. It covers what the system does, how to read the Google Sheet, how to fill in a decision row, and when to trigger a run. No technical background required.
 
 ---
 

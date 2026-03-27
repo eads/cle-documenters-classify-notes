@@ -14,7 +14,7 @@ style: |
   .small { font-size: 1.1rem; }
 ---
 
-# Documenter Themes
+# Documenters Notes Agent
 ## What it does, how to use it
 
 Signal Cleveland · Editorial Guide
